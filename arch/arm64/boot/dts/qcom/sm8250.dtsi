@@ -1472,8 +1472,6 @@
 				clock-names = "pipe0";
 
 				#phy-cells = <0>;
-
-				#clock-cells = <0>;
 				clock-output-names = "pcie_0_pipe_clk";
 			};
 		};
@@ -1580,8 +1578,6 @@
 				clock-names = "pipe0";
 
 				#phy-cells = <0>;
-
-				#clock-cells = <0>;
 				clock-output-names = "pcie_1_pipe_clk";
 			};
 		};
@@ -1688,8 +1684,6 @@
 				clock-names = "pipe0";
 
 				#phy-cells = <0>;
-
-				#clock-cells = <0>;
 				clock-output-names = "pcie_2_pipe_clk";
 			};
 		};

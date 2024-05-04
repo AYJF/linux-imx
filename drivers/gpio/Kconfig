@@ -676,11 +676,11 @@ config GPIO_UNIPHIER
 	  Say yes here to support UniPhier GPIOs.
 
 config GPIO_VF610
-	def_bool y
+	bool "Vybrid VF610/i.MX7ULP GPIO driver"
 	depends on ARCH_MXC
 	select GPIOLIB_IRQCHIP
 	help
-	  Say yes here to support Vybrid vf610 GPIOs.
+	  Say yes here to support Vybrid VF610/i.MX7ULP GPIOs.
 
 config GPIO_VISCONTI
 	tristate "Toshiba Visconti GPIO support"
@@ -1125,13 +1125,6 @@ config GPIO_ADP5520
 	help
 	  This option enables support for on-chip GPIO found
 	  on Analog Devices ADP5520 PMICs.
-
-config GPIO_ADP5585
-	tristate "GPIO Support for ADP5585"
-	depends on MFD_ADP5585
-	help
-	  This option enables support for on-chip GPIO found
-	  on Analog Devices ADP5585.
 
 config GPIO_ALTERA_A10SR
 	tristate "Altera Arria10 System Resource GPIO"

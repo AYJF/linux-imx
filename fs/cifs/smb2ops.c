@@ -1105,7 +1105,9 @@ move_smb2_ea_to_cifs(char *dst, size_t dst_size,
 	size_t name_len, value_len, user_name_len;
 
 	while (src_size > 0) {
+		name = &src->ea_data[0];
 		name_len = (size_t)src->ea_name_length;
+		value = &src->ea_data[src->ea_name_length + 1];
 		value_len = (size_t)le16_to_cpu(src->ea_value_length);
 
 		if (name_len == 0)
@@ -1116,9 +1118,6 @@ move_smb2_ea_to_cifs(char *dst, size_t dst_size,
 			rc = -EIO;
 			goto out;
 		}
-
-		name = &src->ea_data[0];
-		value = &src->ea_data[src->ea_name_length + 1];
 
 		if (ea_name) {
 			if (ea_name_len == name_len &&
@@ -3599,7 +3598,7 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 static long smb3_punch_hole(struct file *file, struct cifs_tcon *tcon,
 			    loff_t offset, loff_t len)
 {
-	struct inode *inode = file_inode(file);
+	struct inode *inode;
 	struct cifsFileInfo *cfile = file->private_data;
 	struct file_zero_data_information fsctl_buf;
 	long rc;
@@ -3608,12 +3607,14 @@ static long smb3_punch_hole(struct file *file, struct cifs_tcon *tcon,
 
 	xid = get_xid();
 
-	inode_lock(inode);
+	inode = d_inode(cfile->dentry);
+
 	/* Need to make file sparse, if not already, before freeing range. */
 	/* Consider adding equivalent for compressed since it could also work */
 	if (!smb2_set_sparse(xid, tcon, cfile, inode, set_sparse)) {
 		rc = -EOPNOTSUPP;
-		goto out;
+		free_xid(xid);
+		return rc;
 	}
 
 	filemap_invalidate_lock(inode->i_mapping);
@@ -3633,10 +3634,8 @@ static long smb3_punch_hole(struct file *file, struct cifs_tcon *tcon,
 			true /* is_fctl */, (char *)&fsctl_buf,
 			sizeof(struct file_zero_data_information),
 			CIFSMaxBufSize, NULL, NULL);
-	filemap_invalidate_unlock(inode->i_mapping);
-out:
-	inode_unlock(inode);
 	free_xid(xid);
+	filemap_invalidate_unlock(inode->i_mapping);
 	return rc;
 }
 

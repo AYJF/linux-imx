@@ -4214,8 +4214,9 @@ normal:
 				SKB_GSO_CB(nskb)->csum_start =
 					skb_headroom(nskb) + doffset;
 			} else {
-				if (skb_copy_bits(head_skb, offset, skb_put(nskb, len), len))
-					goto err;
+				skb_copy_bits(head_skb, offset,
+					      skb_put(nskb, len),
+					      len);
 			}
 			continue;
 		}
@@ -4917,7 +4918,7 @@ static bool skb_may_tx_timestamp(struct sock *sk, bool tsonly)
 {
 	bool ret;
 
-	if (likely(READ_ONCE(sysctl_tstamp_allow_data) || tsonly))
+	if (likely(sysctl_tstamp_allow_data || tsonly))
 		return true;
 
 	read_lock_bh(&sk->sk_callback_lock);

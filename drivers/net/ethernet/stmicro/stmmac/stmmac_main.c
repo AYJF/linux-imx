@@ -1085,10 +1085,10 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			       bool tx_pause, bool rx_pause)
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
-	u32 old_ctrl, ctrl;
+	u32 ctrl;
 
-	old_ctrl = readl(priv->ioaddr + MAC_CTRL_REG);
-	ctrl = old_ctrl & ~priv->hw->link.speed_mask;
+	ctrl = readl(priv->ioaddr + MAC_CTRL_REG);
+	ctrl &= ~priv->hw->link.speed_mask;
 
 	if (interface == PHY_INTERFACE_MODE_USXGMII) {
 		switch (speed) {
@@ -1163,8 +1163,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 	if (tx_pause && rx_pause)
 		stmmac_mac_flow_ctrl(priv, duplex);
 
-	if (ctrl != old_ctrl)
-		writel(ctrl, priv->ioaddr + MAC_CTRL_REG);
+	writel(ctrl, priv->ioaddr + MAC_CTRL_REG);
 
 	stmmac_mac_set(priv, priv->ioaddr, true);
 	if (phy && priv->dma_cap.eee) {
@@ -3787,7 +3786,6 @@ static int stmmac_open(struct net_device *dev)
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
 	stmmac_enable_all_dma_irq(priv);
-	phylink_set_mac_pm(priv->phylink);
 
 	return 0;
 

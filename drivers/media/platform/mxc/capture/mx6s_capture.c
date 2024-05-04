@@ -745,7 +745,7 @@ static int mx6s_csi_enable(struct mx6s_csi_dev *csi_dev)
 	unsigned long val;
 	int timeout, timeout2;
 
-	csi_dev->skipframe = 3;
+	csi_dev->skipframe = 0;
 	csisw_reset(csi_dev);
 
 	if (pix->field == V4L2_FIELD_INTERLACED)
@@ -1131,7 +1131,7 @@ static irqreturn_t mx6s_csi_irq_handler(int irq, void *data)
 		cr18 |= BIT_CSI_ENABLE;
 		csi_write(csi_dev, cr18, CSI_CSICR18);
 
-		csi_dev->skipframe++;
+		csi_dev->skipframe = 1;
 		pr_debug("base address switching Change Err.\n");
 	}
 
@@ -1288,6 +1288,9 @@ static int mx6s_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 
 static int mx6s_vidioc_s_input(struct file *file, void *priv, unsigned int i)
 {
+	if (i > 0)
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -1473,23 +1476,11 @@ static int mx6s_vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 				    struct v4l2_format *f)
 {
 	struct mx6s_csi_dev *csi_dev = video_drvdata(file);
-	struct mx6s_fmt *fmt6s = NULL;
 
 	WARN_ON(priv != file->private_data);
 
 	f->fmt.pix = csi_dev->pix;
-	fmt6s = format_by_mbus(csi_dev->mbus_code);
 
-	if (fmt6s != NULL) {
-		f->fmt.pix.pixelformat = fmt6s->pixelformat;
-		csi_dev->pix.pixelformat = fmt6s->pixelformat;
-	}
-
-	f->fmt.pix.width = csi_dev->pix.width;
-	f->fmt.pix.height = csi_dev->pix.height;
-	f->fmt.pix.sizeimage = csi_dev->pix.sizeimage;
-	f->fmt.pix.field = csi_dev->pix.field;
-	f->type = csi_dev->type;
 	return 0;
 }
 

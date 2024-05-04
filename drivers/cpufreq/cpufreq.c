@@ -532,7 +532,7 @@ static unsigned int __resolve_freq(struct cpufreq_policy *policy,
 
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 
-	if (!policy->freq_table)
+	if (!cpufreq_driver->target_index)
 		return target_freq;
 
 	idx = cpufreq_frequency_table_target(policy, target_freq, relation);

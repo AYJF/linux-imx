@@ -275,8 +275,7 @@ static bool nested_vmcb_check_cr3_cr4(struct kvm_vcpu *vcpu,
 			return false;
 	}
 
-	/* Note, SVM doesn't have any additional restrictions on CR4. */
-	if (CC(!__kvm_is_valid_cr4(vcpu, save->cr4)))
+	if (CC(!kvm_is_valid_cr4(vcpu, save->cr4)))
 		return false;
 
 	return true;

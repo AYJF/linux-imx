@@ -206,12 +206,12 @@ struct sdma_script_start_addrs {
 	s32 per_2_firi_addr;
 	s32 mcu_2_firi_addr;
 	s32 uart_2_per_addr;
-	s32 uart_2_mcu_ram_addr;
+	s32 uart_2_mcu_addr;
 	s32 per_2_app_addr;
 	s32 mcu_2_app_addr;
 	s32 per_2_per_addr;
 	s32 uartsh_2_per_addr;
-	s32 uartsh_2_mcu_ram_addr;
+	s32 uartsh_2_mcu_addr;
 	s32 per_2_shp_addr;
 	s32 mcu_2_shp_addr;
 	s32 ata_2_mcu_addr;
@@ -238,12 +238,12 @@ struct sdma_script_start_addrs {
 	s32 zcanfd_2_mcu_addr;
 	s32 zqspi_2_mcu_addr;
 	s32 mcu_2_ecspi_addr;
-	s32 mcu_2_sai_addr;
-	s32 sai_2_mcu_addr;
-	s32 uart_2_mcu_addr;
-	s32 uartsh_2_mcu_addr;
+    s32 mcu_2_sai_addr;
+    s32 sai_2_mcu_addr;
 	s32 i2c_2_mcu_addr;
 	s32 mcu_2_i2c_addr;
+	s32 uart_2_mcu_rom_addr;
+	s32 uartsh_2_mcu_rom_addr;
 	/* End of v3 array */
 	s32 mcu_2_zqspi_addr;
 	/* End of v4 array */
@@ -2196,7 +2196,6 @@ static void sdma_issue_pending(struct dma_chan *chan)
 	if (vchan_issue_pending(&sdmac->vc) && !sdmac->desc)
 		sdma_start_desc(sdmac);
 	spin_unlock_irqrestore(&sdmac->vc.lock, flags);
-
 	sdma_pm_clk_enable(sdmac->sdma, false, false);
 }
 

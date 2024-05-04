@@ -1015,15 +1015,6 @@ S:	Maintained
 F:	Documentation/hid/amd-sfh*
 F:	drivers/hid/amd-sfh-hid/
 
-AMPHION VPU CODEC V4L2 DRIVER
-M:	Ming Qian <ming.qian@nxp.com>
-M:	Shijie Qin <shijie.qin@nxp.com>
-M:	Zhou Peng <eagle.zhou@nxp.com>
-L:	linux-media@vger.kernel.org
-S:	Maintained
-F:	Documentation/devicetree/bindings/media/amphion,vpu.yaml
-F:	drivers/media/platform/amphion/
-
 AMS AS73211 DRIVER
 M:	Christian Eggers <ceggers@arri.de>
 L:	linux-iio@vger.kernel.org
@@ -5758,7 +5749,6 @@ F:	drivers/net/ethernet/freescale/dpaa2/Kconfig
 F:	drivers/net/ethernet/freescale/dpaa2/Makefile
 F:	drivers/net/ethernet/freescale/dpaa2/dpaa2-eth*
 F:	drivers/net/ethernet/freescale/dpaa2/dpaa2-mac*
-F:	drivers/net/ethernet/freescale/dpaa2/dpaa2-xsk*
 F:	drivers/net/ethernet/freescale/dpaa2/dpkg.h
 F:	drivers/net/ethernet/freescale/dpaa2/dpmac*
 F:	drivers/net/ethernet/freescale/dpaa2/dpni*
@@ -13601,7 +13591,7 @@ R:	NXP Linux Team <linux-imx@nxp.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/imx8-jpeg.yaml
-F:	drivers/media/platform/nxp/imx-jpeg
+F:	drivers/media/platform/imx-jpeg
 
 NZXT-KRAKEN2 HARDWARE MONITORING DRIVER
 M:	Jonas Malaco <jonas@protocubo.io>
@@ -20878,9 +20868,3 @@ Q:	http://patchwork.kernel.org/project/LKML/list/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 F:	*
 F:	*/
-
-NXP IMX9 TRUE RANDOM NUMBER GENERATOR (TRNG) DRIVER
-M:	Gaurav Jain <gaurav.jain@nxp.com>
-L:	linux-crypto@vger.kernel.org
-S:	Maintained
-F:	drivers/firmware/imx/ele_trng.c

@@ -164,6 +164,11 @@ properties:
       req_gpr is the gpr register offset for ENET stop request.
       req_bit is the gpr bit offset for ENET stop request.
 
+  fsl,wakeup_irq:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The property defines the wakeup irq index in enet irq source.
+
   mii-exclusive:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
@@ -206,10 +211,6 @@ properties:
       milliseconds will be observed after the phy-reset-gpios has been toggled.
       Can be omitted thus no delay is observed. Delay is in range of 1ms to 1000ms.
       Other delays are invalid.
-
-  phy-reset-on-resume:
-    description:
-      If present, the phy will be reset upon resume from sleep.
 
 required:
   - compatible

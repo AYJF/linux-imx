@@ -10,8 +10,6 @@
 #include "imx8mn.dtsi"
 
 / {
-	compatible = "variscite,imx8mn-var-som", "fsl,imx8mn";
-
 	can0_osc: can0_osc {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;

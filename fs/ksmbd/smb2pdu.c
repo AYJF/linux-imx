@@ -541,10 +541,9 @@ int smb2_allocate_rsp_buf(struct ksmbd_work *work)
 		struct smb2_query_info_req *req;
 
 		req = work->request_buf;
-		if ((req->InfoType == SMB2_O_INFO_FILE &&
-		     (req->FileInfoClass == FILE_FULL_EA_INFORMATION ||
-		      req->FileInfoClass == FILE_ALL_INFORMATION)) ||
-		    req->InfoType == SMB2_O_INFO_SECURITY)
+		if (req->InfoType == SMB2_O_INFO_FILE &&
+		    (req->FileInfoClass == FILE_FULL_EA_INFORMATION ||
+		     req->FileInfoClass == FILE_ALL_INFORMATION))
 			sz = large_sz;
 	}
 
@@ -1147,16 +1146,12 @@ int smb2_handle_negotiate(struct ksmbd_work *work)
 			       status);
 			rsp->hdr.Status = status;
 			rc = -EINVAL;
-			kfree(conn->preauth_info);
-			conn->preauth_info = NULL;
 			goto err_out;
 		}
 
 		rc = init_smb3_11_server(conn);
 		if (rc < 0) {
 			rsp->hdr.Status = STATUS_INVALID_PARAMETER;
-			kfree(conn->preauth_info);
-			conn->preauth_info = NULL;
 			goto err_out;
 		}
 
@@ -1932,9 +1927,8 @@ out_err1:
 		rsp->hdr.Status = STATUS_SUCCESS;
 		rc = 0;
 		break;
-	case -ENOENT:
 	case KSMBD_TREE_CONN_STATUS_NO_SHARE:
-		rsp->hdr.Status = STATUS_BAD_NETWORK_NAME;
+		rsp->hdr.Status = STATUS_BAD_NETWORK_PATH;
 		break;
 	case -ENOMEM:
 	case KSMBD_TREE_CONN_STATUS_NOMEM:
@@ -2046,7 +2040,6 @@ int smb2_tree_disconnect(struct ksmbd_work *work)
 
 	ksmbd_close_tree_conn_fds(work);
 	ksmbd_tree_conn_disconnect(sess, tcon);
-	work->tcon = NULL;
 	return 0;
 }
 
@@ -2319,15 +2312,15 @@ static int smb2_remove_smb_xattrs(struct path *path)
 			name += strlen(name) + 1) {
 		ksmbd_debug(SMB, "%s, len %zd\n", name, strlen(name));
 
-		if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN) &&
-		    !strncmp(&name[XATTR_USER_PREFIX_LEN], STREAM_PREFIX,
-			     STREAM_PREFIX_LEN)) {
-			err = ksmbd_vfs_remove_xattr(user_ns, path->dentry,
-						     name);
-			if (err)
-				ksmbd_debug(SMB, "remove xattr failed : %s\n",
-					    name);
-		}
+		if (strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN) &&
+		    strncmp(&name[XATTR_USER_PREFIX_LEN], DOS_ATTRIBUTE_PREFIX,
+			    DOS_ATTRIBUTE_PREFIX_LEN) &&
+		    strncmp(&name[XATTR_USER_PREFIX_LEN], STREAM_PREFIX, STREAM_PREFIX_LEN))
+			continue;
+
+		err = ksmbd_vfs_remove_xattr(user_ns, path->dentry, name);
+		if (err)
+			ksmbd_debug(SMB, "remove xattr failed : %s\n", name);
 	}
 out:
 	kvfree(xattr_list);
@@ -2983,7 +2976,7 @@ int smb2_open(struct ksmbd_work *work)
 						goto err_out;
 
 					rc = build_sec_desc(user_ns,
-							    pntsd, NULL, 0,
+							    pntsd, NULL,
 							    OWNER_SECINFO |
 							    GROUP_SECINFO |
 							    DACL_SECINFO,
@@ -3826,15 +3819,6 @@ static int verify_info_level(int info_level)
 	return 0;
 }
 
-static int smb2_resp_buf_len(struct ksmbd_work *work, unsigned short hdr2_len)
-{
-	int free_len;
-
-	free_len = (int)(work->response_sz -
-		(get_rfc1002_len(work->response_buf) + 4)) - hdr2_len;
-	return free_len;
-}
-
 static int smb2_calc_max_out_buf_len(struct ksmbd_work *work,
 				     unsigned short hdr2_len,
 				     unsigned int out_buf_len)
@@ -3844,7 +3828,9 @@ static int smb2_calc_max_out_buf_len(struct ksmbd_work *work,
 	if (out_buf_len > work->conn->vals->max_trans_size)
 		return -EINVAL;
 
-	free_len = smb2_resp_buf_len(work, hdr2_len);
+	free_len = (int)(work->response_sz -
+			 (get_rfc1002_len(work->response_buf) + 4)) -
+		hdr2_len;
 	if (free_len < 0)
 		return -EINVAL;
 
@@ -5096,10 +5082,10 @@ static int smb2_get_info_sec(struct ksmbd_work *work,
 	struct smb_ntsd *pntsd = (struct smb_ntsd *)rsp->Buffer, *ppntsd = NULL;
 	struct smb_fattr fattr = {{0}};
 	struct inode *inode;
-	__u32 secdesclen = 0;
+	__u32 secdesclen;
 	unsigned int id = KSMBD_NO_FID, pid = KSMBD_NO_FID;
 	int addition_info = le32_to_cpu(req->AdditionalInformation);
-	int rc = 0, ppntsd_size = 0;
+	int rc;
 
 	if (addition_info & ~(OWNER_SECINFO | GROUP_SECINFO | DACL_SECINFO |
 			      PROTECTED_DACL_SECINFO |
@@ -5145,14 +5131,11 @@ static int smb2_get_info_sec(struct ksmbd_work *work,
 
 	if (test_share_config_flag(work->tcon->share_conf,
 				   KSMBD_SHARE_FLAG_ACL_XATTR))
-		ppntsd_size = ksmbd_vfs_get_sd_xattr(work->conn, user_ns,
-						     fp->filp->f_path.dentry,
-						     &ppntsd);
+		ksmbd_vfs_get_sd_xattr(work->conn, user_ns,
+				       fp->filp->f_path.dentry, &ppntsd);
 
-	/* Check if sd buffer size exceeds response buffer size */
-	if (smb2_resp_buf_len(work, 8) > ppntsd_size)
-		rc = build_sec_desc(user_ns, pntsd, ppntsd, ppntsd_size,
-				    addition_info, &secdesclen, &fattr);
+	rc = build_sec_desc(user_ns, pntsd, ppntsd, addition_info,
+			    &secdesclen, &fattr);
 	posix_acl_release(fattr.cf_acls);
 	posix_acl_release(fattr.cf_dacls);
 	kfree(ppntsd);
@@ -6483,8 +6466,10 @@ int smb2_write(struct ksmbd_work *work)
 		    (offsetof(struct smb2_write_req, Buffer) - 4)) {
 			data_buf = (char *)&req->Buffer[0];
 		} else {
-			if (le16_to_cpu(req->DataOffset) <
-			    offsetof(struct smb2_write_req, Buffer)) {
+			if ((u64)le16_to_cpu(req->DataOffset) + length > get_rfc1002_len(req)) {
+				pr_err("invalid write data offset %u, smb_len %u\n",
+				       le16_to_cpu(req->DataOffset),
+				       get_rfc1002_len(req));
 				err = -EINVAL;
 				goto out;
 			}

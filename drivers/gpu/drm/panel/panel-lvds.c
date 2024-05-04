@@ -29,9 +29,9 @@ struct panel_lvds {
 	const char *label;
 	unsigned int width;
 	unsigned int height;
-	struct drm_display_mode dmode;
-	u32 bus_flags;
+	struct videomode video_mode;
 	unsigned int bus_format;
+	bool data_mirror;
 
 	struct regulator *supply;
 
@@ -86,18 +86,21 @@ static int panel_lvds_get_modes(struct drm_panel *panel,
 	struct panel_lvds *lvds = to_panel_lvds(panel);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(connector->dev, &lvds->dmode);
+	mode = drm_mode_create(connector->dev);
 	if (!mode)
 		return 0;
 
+	drm_display_mode_from_videomode(&lvds->video_mode, mode);
 	mode->type |= DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 	drm_mode_probed_add(connector, mode);
 
-	connector->display_info.width_mm = lvds->dmode.width_mm;
-	connector->display_info.height_mm = lvds->dmode.height_mm;
+	connector->display_info.width_mm = lvds->width;
+	connector->display_info.height_mm = lvds->height;
 	drm_display_info_set_bus_formats(&connector->display_info,
 					 &lvds->bus_format, 1);
-	connector->display_info.bus_flags = lvds->bus_flags;
+	connector->display_info.bus_flags = lvds->data_mirror
+					  ? DRM_BUS_FLAG_DATA_LSB_TO_MSB
+					  : DRM_BUS_FLAG_DATA_MSB_TO_LSB;
 	drm_connector_set_panel_orientation(connector, lvds->orientation);
 
 	return 1;
@@ -112,6 +115,7 @@ static const struct drm_panel_funcs panel_lvds_funcs = {
 static int panel_lvds_parse_dt(struct panel_lvds *lvds)
 {
 	struct device_node *np = lvds->dev->of_node;
+	struct display_timing timing;
 	const char *mapping;
 	int ret;
 
@@ -121,20 +125,23 @@ static int panel_lvds_parse_dt(struct panel_lvds *lvds)
 		return ret;
 	}
 
-	ret = of_get_drm_panel_display_mode(np, &lvds->dmode, &lvds->bus_flags);
+	ret = of_get_display_timing(np, "panel-timing", &timing);
 	if (ret < 0) {
 		dev_err(lvds->dev, "%pOF: problems parsing panel-timing (%d)\n",
 			np, ret);
 		return ret;
 	}
 
-	if (lvds->dmode.width_mm == 0) {
+	videomode_from_timing(&timing, &lvds->video_mode);
+
+	ret = of_property_read_u32(np, "width-mm", &lvds->width);
+	if (ret < 0) {
 		dev_err(lvds->dev, "%pOF: invalid or missing %s DT property\n",
 			np, "width-mm");
 		return -ENODEV;
 	}
-
-	if (lvds->dmode.height_mm == 0) {
+	ret = of_property_read_u32(np, "height-mm", &lvds->height);
+	if (ret < 0) {
 		dev_err(lvds->dev, "%pOF: invalid or missing %s DT property\n",
 			np, "height-mm");
 		return -ENODEV;
@@ -161,9 +168,7 @@ static int panel_lvds_parse_dt(struct panel_lvds *lvds)
 		return -EINVAL;
 	}
 
-	lvds->bus_flags |= of_property_read_bool(np, "data-mirror") ?
-			   DRM_BUS_FLAG_DATA_LSB_TO_MSB :
-			   DRM_BUS_FLAG_DATA_MSB_TO_LSB;
+	lvds->data_mirror = of_property_read_bool(np, "data-mirror");
 
 	return 0;
 }

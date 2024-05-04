@@ -119,6 +119,7 @@ struct nvme_tcp_queue {
 	struct mutex		send_mutex;
 	struct llist_head	req_list;
 	struct list_head	send_list;
+	bool			more_requests;
 
 	/* recv state */
 	void			*pdu;
@@ -314,7 +315,7 @@ static inline void nvme_tcp_send_all(struct nvme_tcp_queue *queue)
 static inline bool nvme_tcp_queue_more(struct nvme_tcp_queue *queue)
 {
 	return !list_empty(&queue->send_list) ||
-		!llist_empty(&queue->req_list);
+		!llist_empty(&queue->req_list) || queue->more_requests;
 }
 
 static inline void nvme_tcp_queue_request(struct nvme_tcp_request *req,
@@ -333,7 +334,9 @@ static inline void nvme_tcp_queue_request(struct nvme_tcp_request *req,
 	 */
 	if (queue->io_cpu == raw_smp_processor_id() &&
 	    sync && empty && mutex_trylock(&queue->send_mutex)) {
+		queue->more_requests = !last;
 		nvme_tcp_send_all(queue);
+		queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
 	}
 
@@ -1206,7 +1209,7 @@ static void nvme_tcp_io_work(struct work_struct *w)
 		else if (unlikely(result < 0))
 			return;
 
-		if (!pending || !queue->rd_enabled)
+		if (!pending)
 			return;
 
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */

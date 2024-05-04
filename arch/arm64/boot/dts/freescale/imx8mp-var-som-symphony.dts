@@ -319,10 +319,6 @@
 	};
 };
 
-&isp0_reserved {
-	status = "disabled";
-};
-
 &flexcan2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexcan2>;
@@ -663,6 +659,15 @@
 		fsl,pins = <
 			MX8MP_IOMUXC_UART2_RXD__UART2_DCE_RX				0x40
 			MX8MP_IOMUXC_UART2_TXD__UART2_DCE_TX				0x40
+		>;
+	};
+
+	pinctrl_uart3: uart3grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_ECSPI1_SCLK__UART3_DCE_RX				0x140
+			MX8MP_IOMUXC_ECSPI1_MOSI__UART3_DCE_TX				0x140
+			MX8MP_IOMUXC_ECSPI1_MISO__UART3_DCE_CTS				0x140
+			MX8MP_IOMUXC_ECSPI1_SS0__UART3_DCE_RTS				0x140
 		>;
 	};
 

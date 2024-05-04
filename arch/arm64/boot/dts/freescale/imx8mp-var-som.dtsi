@@ -370,7 +370,7 @@
 };
 
 &vpu_v4l2 {
-	status = "okay";
+	status = "disabled";
 };
 
 &gpu_3d {
@@ -463,15 +463,6 @@
 			MX8MP_IOMUXC_SAI3_MCLK__AUDIOMIX_SAI3_MCLK			0xd6
 			MX8MP_IOMUXC_SAI3_RXFS__AUDIOMIX_SAI3_RX_SYNC			0xd6
 			MX8MP_IOMUXC_SAI3_RXC__AUDIOMIX_SAI3_RX_BCLK			0xd6
-		>;
-	};
-
-	pinctrl_uart3: uart3grp {
-		fsl,pins = <
-			MX8MP_IOMUXC_ECSPI1_SCLK__UART3_DCE_RX				0x140
-			MX8MP_IOMUXC_ECSPI1_MOSI__UART3_DCE_TX				0x140
-			MX8MP_IOMUXC_ECSPI1_MISO__UART3_DCE_CTS				0x140
-			MX8MP_IOMUXC_ECSPI1_SS0__UART3_DCE_RTS				0x140
 		>;
 	};
 

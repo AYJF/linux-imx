@@ -145,10 +145,10 @@ struct imx_rproc {
 	int				num_domains;
 	struct device			**pm_devices;
 	struct device_link		**pm_devices_link;
-	u32				startup_delay;
 	u32				m_core_ddr_addr;
 	u32 				last_load_addr;
 	u32				m4_start_addr;
+	u32				startup_delay;
 };
 
 static struct imx_sc_ipc *ipc_handle;
@@ -157,13 +157,13 @@ static const struct imx_rproc_att imx_rproc_att_imx8qm[] = {
 	/* dev addr , sys addr  , size	    , flags */
 	{ 0x08000000, 0x08000000, 0x10000000, 0},
 	/* TCML */
-	{ 0x1FFE0000, 0x34FE0000, 0x00020000, ATT_OWN | ATT_CORE(0)},
-	{ 0x1FFE0000, 0x38FE0000, 0x00020000, ATT_OWN | ATT_CORE(1)},
+	{ 0x1FFE0000, 0x34FE0000, 0x00020000, ATT_OWN | ATT_IOMEM | ATT_CORE(0)},
+	{ 0x1FFE0000, 0x38FE0000, 0x00020000, ATT_OWN | ATT_IOMEM | ATT_CORE(1)},
 	/* TCMU */
-	{ 0x20000000, 0x35000000, 0x00020000, ATT_OWN | ATT_CORE(0)},
-	{ 0x20000000, 0x39000000, 0x00020000, ATT_OWN | ATT_CORE(1)},
+	{ 0x20000000, 0x35000000, 0x00020000, ATT_OWN | ATT_IOMEM | ATT_CORE(0)},
+	{ 0x20000000, 0x39000000, 0x00020000, ATT_OWN | ATT_IOMEM | ATT_CORE(1)},
 	/* DDR (Data) */
-	{ 0x80000000, 0x80000000, 0x60000000, 0 },
+	{ 0x80000000, 0x80000000, 0x60000000, ATT_IOMEM },
 };
 
 static const struct imx_rproc_att imx_rproc_att_imx8qxp[] = {
@@ -178,29 +178,7 @@ static const struct imx_rproc_att imx_rproc_att_imx8qxp[] = {
 	/* OCRAM */
 	{ 0x21100000, 0x00100000, 0x00040000, 0},
 	/* DDR (Data) */
-	{ 0x80000000, 0x80000000, 0x60000000, 0 },
-};
-
-static const struct imx_rproc_att imx_rproc_att_imx93[] = {
-	/* dev addr , sys addr  , size	    , flags */
-	/* TCM CODE NON-SECURE */
-	{ 0x0FFC0000, 0x201C0000, 0x00040000, ATT_OWN | ATT_IOMEM },
-
-	/* TCM CODE SECURE */
-	{ 0x1FFC0000, 0x201C0000, 0x00040000, ATT_OWN | ATT_IOMEM },
-
-	/* TCM SYS NON-SECURE*/
-	{ 0x20000000, 0x20200000, 0x00040000, ATT_OWN | ATT_IOMEM },
-
-	/* TCM SYS SECURE*/
-	{ 0x30000000, 0x20200000, 0x00040000, ATT_OWN | ATT_IOMEM },
-
-	/* DDR */
-	{ 0x80000000, 0x80000000, 0x10000000, 0 },
-	{ 0x90000000, 0x80000000, 0x10000000, 0 },
-
-	{ 0xC0000000, 0xc0000000, 0x10000000, 0 },
-	{ 0xD0000000, 0xc0000000, 0x10000000, 0 },
+	{ 0x80000000, 0x80000000, 0x60000000, ATT_IOMEM },
 };
 
 static const struct imx_rproc_att imx_rproc_att_imx8mn[] = {
@@ -385,22 +363,6 @@ static const struct imx_rproc_dcfg imx_rproc_cfg_imx8qm = {
 	.method		= IMX_SCU_API,
 };
 
-static const struct imx_rproc_dcfg imx_rproc_cfg_imx93 = {
-	.att		= imx_rproc_att_imx93,
-	.att_size	= ARRAY_SIZE(imx_rproc_att_imx93),
-	.method		= IMX_RPROC_SMC,
-};
-
-static bool imx_rproc_is_imx93(struct rproc *rproc)
-{
-	struct imx_rproc *priv = rproc->priv;
-	const struct imx_rproc_dcfg *dcfg = priv->dcfg;
-
-	if (dcfg == &imx_rproc_cfg_imx93)
-		return true;
-	else
-		return false;
-}
 
 static int imx_rproc_ready(struct rproc *rproc)
 {
@@ -557,8 +519,7 @@ static int imx_rproc_start(struct rproc *rproc)
 					 dcfg->src_start);
 		break;
 	case IMX_RPROC_SMC:
-		if (!imx_rproc_is_imx93(rproc))
-			imx_8m_setup_stack(rproc);
+		imx_8m_setup_stack(rproc);
 		arm_smccc_smc(IMX_SIP_RPROC, IMX_SIP_RPROC_START, 0, 0, 0, 0, 0, 0, &res);
 		ret = res.a0;
 		break;
@@ -979,22 +940,21 @@ static int imx_rproc_addr_init(struct imx_rproc *priv,
 
 		node = of_parse_phandle(np, "memory-region", a);
 		/* Not map vdevbuffer, vdevring region */
-		if (!strncmp(node->name, "vdev", strlen("vdev"))) {
-			of_node_put(node);
+		if (!strncmp(node->name, "vdev", strlen("vdev")))
 			continue;
-		}
 		err = of_address_to_resource(node, 0, &res);
-		of_node_put(node);
 		if (err) {
 			dev_err(dev, "unable to resolve memory region\n");
 			return err;
 		}
 
+		of_node_put(node);
+
 		if (b >= IMX_RPROC_MEM_MAX)
 			break;
 
 		/* Not use resource version, because we might share region */
-		priv->mem[b].cpu_addr = devm_ioremap_wc(&pdev->dev, res.start, resource_size(&res));
+		priv->mem[b].cpu_addr = devm_ioremap(&pdev->dev, res.start, resource_size(&res));
 		if (!priv->mem[b].cpu_addr) {
 			dev_err(dev, "failed to remap %pr\n", &res);
 			return -ENOMEM;
@@ -1188,11 +1148,11 @@ static int imx_rproc_detect_mode(struct imx_rproc *priv)
 
 		if (priv->num_domains) {
 			priv->pm_devices = devm_kcalloc(dev, priv->num_domains,
-							sizeof(*priv->pm_devices), GFP_KERNEL);
+							sizeof(struct device), GFP_KERNEL);
 			if (!priv->pm_devices)
 				return -ENOMEM;
 			priv->pm_devices_link = devm_kcalloc(dev, priv->num_domains,
-							     sizeof(*priv->pm_devices_link),
+							     sizeof(struct device_link),
 							     GFP_KERNEL);
 			if (!priv->pm_devices)
 				return -ENOMEM;
@@ -1338,8 +1298,6 @@ static int imx_rproc_probe(struct platform_device *pdev)
 		goto err_put_rproc;
 	}
 
-	INIT_WORK(&priv->rproc_work, imx_rproc_vq_work);
-
 	ret = imx_rproc_xtr_mbox_init(rproc);
 	if (ret)
 		goto err_put_wkq;
@@ -1361,6 +1319,8 @@ static int imx_rproc_probe(struct platform_device *pdev)
 	ret = imx_rproc_clk_enable(priv);
 	if (ret)
 		goto err_put_mbox;
+
+	INIT_WORK(&priv->rproc_work, imx_rproc_vq_work);
 
 	rproc->auto_boot = false;
 	if (priv->early_boot)
@@ -1425,7 +1385,6 @@ static const struct of_device_id imx_rproc_of_match[] = {
 	{ .compatible = "fsl,imx8qxp-cm4", .data = &imx_rproc_cfg_imx8qxp },
 	{ .compatible = "fsl,imx8qm-cm4", .data = &imx_rproc_cfg_imx8qm },
 	{ .compatible = "fsl,imx8ulp-cm33", .data = &imx_rproc_cfg_imx8ulp },
-	{ .compatible = "fsl,imx93-cm33", .data = &imx_rproc_cfg_imx93 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, imx_rproc_of_match);

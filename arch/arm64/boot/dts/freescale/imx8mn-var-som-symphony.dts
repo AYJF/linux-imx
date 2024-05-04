@@ -11,6 +11,7 @@
 
 / {
 	model = "Variscite VAR-SOM-MX8M-NANO on Symphony-Board";
+	compatible = "variscite,var-som-mx8mn", "fsl,imx8mn";
 
 	chosen {
 		stdout-path = &uart4;

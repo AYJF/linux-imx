@@ -251,7 +251,9 @@ void btrfs_dec_nocow_writers(struct btrfs_fs_info *fs_info, u64 bytenr);
 void btrfs_wait_nocow_writers(struct btrfs_block_group *bg);
 void btrfs_wait_block_group_cache_progress(struct btrfs_block_group *cache,
 				           u64 num_bytes);
-int btrfs_cache_block_group(struct btrfs_block_group *cache, bool wait);
+int btrfs_wait_block_group_cache_done(struct btrfs_block_group *cache);
+int btrfs_cache_block_group(struct btrfs_block_group *cache,
+			    int load_cache_only);
 void btrfs_put_caching_control(struct btrfs_caching_control *ctl);
 struct btrfs_caching_control *btrfs_get_caching_control(
 		struct btrfs_block_group *cache);

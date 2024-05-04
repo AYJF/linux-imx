@@ -5371,7 +5371,7 @@ int hugetlb_mcopy_atomic_pte(struct mm_struct *dst_mm,
 	if (!huge_pte_none(huge_ptep_get(dst_pte)))
 		goto out_release_unlock;
 
-	if (page_in_pagecache) {
+	if (vm_shared) {
 		page_dup_rmap(page, true);
 	} else {
 		ClearHPageRestoreReserve(page);

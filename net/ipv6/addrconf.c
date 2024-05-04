@@ -7128,8 +7128,9 @@ static int __net_init addrconf_init_net(struct net *net)
 	if (!dflt)
 		goto err_alloc_dflt;
 
-	if (!net_eq(net, &init_net)) {
-		switch (net_inherit_devconf()) {
+	if (IS_ENABLED(CONFIG_SYSCTL) &&
+	    !net_eq(net, &init_net)) {
+		switch (sysctl_devconf_inherit_init_net) {
 		case 1:  /* copy from init_net */
 			memcpy(all, init_net.ipv6.devconf_all,
 			       sizeof(ipv6_devconf));

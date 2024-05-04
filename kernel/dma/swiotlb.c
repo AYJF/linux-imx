@@ -435,10 +435,7 @@ static void swiotlb_bounce(struct device *dev, phys_addr_t tlb_addr, size_t size
 	}
 }
 
-static inline phys_addr_t slot_addr(phys_addr_t start, phys_addr_t idx)
-{
-	return start + (idx << IO_TLB_SHIFT);
-}
+#define slot_addr(start, idx)	((start) + ((idx) << IO_TLB_SHIFT))
 
 /*
  * Carefully handle integer overflow which can occur when boundary_mask == ~0UL.
@@ -554,7 +551,7 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	int index;
 	phys_addr_t tlb_addr;
 
-	if (!mem || !mem->nslabs)
+	if (!mem)
 		panic("Can not allocate SWIOTLB buffer earlier and can't now provide you with the DMA bounce buffer");
 
 	if (mem_encrypt_active())

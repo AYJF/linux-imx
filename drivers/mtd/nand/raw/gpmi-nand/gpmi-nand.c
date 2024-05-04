@@ -688,11 +688,6 @@ static int common_nfc_set_geometry(struct gpmi_nand_data *this)
 	const struct nand_ecc_props *requirements =
 		nanddev_get_ecc_requirements(&chip->base);
 
-	if (this->legacy_bch_geometry) {
-		dev_warn(this->dev, "use legacy bch geometry\n");
-		return legacy_set_geometry(this);
-	}
-
 	if (requirements->strength > 0 && requirements->step_size > 0) {
 		if (mtd->oobsize > 1024
 		    || requirements->step_size < mtd->oobsize)
@@ -907,7 +902,7 @@ static int gpmi_nfc_compute_timings(struct gpmi_nand_data *this,
 	hw->timing0 = BF_GPMI_TIMING0_ADDRESS_SETUP(addr_setup_cycles) |
 		      BF_GPMI_TIMING0_DATA_HOLD(data_hold_cycles) |
 		      BF_GPMI_TIMING0_DATA_SETUP(data_setup_cycles);
-	hw->timing1 = BF_GPMI_TIMING1_BUSY_TIMEOUT(DIV_ROUND_UP(busy_timeout_cycles, 4096));
+	hw->timing1 = BF_GPMI_TIMING1_BUSY_TIMEOUT(busy_timeout_cycles * 4096);
 
 	/*
 	 * Derive NFC ideal delay from {3}:
@@ -2378,10 +2373,6 @@ static int gpmi_nand_attach_chip(struct nand_chip *chip)
 	}
 	dev_dbg(this->dev, "Blockmark swapping %sabled\n",
 		this->swap_block_mark ? "en" : "dis");
-
-	if (of_property_read_bool(this->dev->of_node,
-			"fsl,legacy-bch-geometry"))
-		this->legacy_bch_geometry = true;
 
 	ret = gpmi_init_last(this);
 	if (ret)

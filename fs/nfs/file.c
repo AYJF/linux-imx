@@ -223,10 +223,8 @@ nfs_file_fsync_commit(struct file *file, int datasync)
 int
 nfs_file_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 {
+	struct nfs_open_context *ctx = nfs_file_open_context(file);
 	struct inode *inode = file_inode(file);
-	struct nfs_inode *nfsi = NFS_I(inode);
-	long save_nredirtied = atomic_long_read(&nfsi->redirtied_pages);
-	long nredirtied;
 	int ret;
 
 	trace_nfs_fsync_enter(inode);
@@ -241,10 +239,15 @@ nfs_file_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 		ret = pnfs_sync_inode(inode, !!datasync);
 		if (ret != 0)
 			break;
-		nredirtied = atomic_long_read(&nfsi->redirtied_pages);
-		if (nredirtied == save_nredirtied)
+		if (!test_and_clear_bit(NFS_CONTEXT_RESEND_WRITES, &ctx->flags))
 			break;
-		save_nredirtied = nredirtied;
+		/*
+		 * If nfs_file_fsync_commit detected a server reboot, then
+		 * resend all dirty pages that might have been covered by
+		 * the NFS_CONTEXT_RESEND_WRITES flag
+		 */
+		start = 0;
+		end = LLONG_MAX;
 	}
 
 	trace_nfs_fsync_exit(inode, ret);

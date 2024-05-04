@@ -15,17 +15,11 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_basler>;
 
-	cam0_pwr_hog {
+	cam_pwr_hog {
 		gpio-hog;
 		gpios = <8 0>;
 		output-high;
-		line-name = "basler0_cam_pwr";
-	};
-	cam1_pwr_hog {
-		gpio-hog;
-		gpios = <9 0>;
-		output-high;
-		line-name = "basler1_cam_pwr";
+		line-name = "basler_cam_pwr";
 	};
 };
 

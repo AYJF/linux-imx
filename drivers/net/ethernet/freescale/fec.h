@@ -644,20 +644,8 @@ struct fec_enet_private {
 	unsigned int reload_period;
 	int pps_enable;
 	unsigned int next_counter;
-	struct hrtimer perout_timer;
-	u64 perout_stime;
 
 	struct imx_sc_ipc *ipc_handle;
-
-	bool phy_reset_on_resume;
-	bool phy_reset_active_high;
-	int phy_reset_gpios;
-
-	/* phy reset duration in ms */
-	int phy_reset_duration;
-
-	/* phy post reset delay in ms */
-	int phy_reset_post_delay;
 
 	u64 ethtool_stats[];
 };

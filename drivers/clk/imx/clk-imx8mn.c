@@ -326,15 +326,13 @@ static int imx8mn_clocks_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct device_node *cm_np;
 	void __iomem *base;
 	int ret;
 
 	check_m4_enabled();
 
-	cm_np = of_find_compatible_node(NULL, NULL, "fsl,imx8mn-cm7");
-	if (of_device_is_available(cm_np))
-		mcore_booted = true;
+	if (of_find_compatible_node(NULL, NULL, "fsl,imx8mn-cm7"))
+		set_cm4_enable(true);
 
 	clk_hw_data = kzalloc(struct_size(clk_hw_data, hws,
 					  IMX8MN_CLK_END), GFP_KERNEL);
@@ -640,8 +638,6 @@ static struct platform_driver imx8mn_clk_driver = {
 	},
 };
 module_platform_driver(imx8mn_clk_driver);
-module_param(mcore_booted, bool, S_IRUGO);
-MODULE_PARM_DESC(mcore_booted, "See Cortex-M core is booted or not");
 
 MODULE_AUTHOR("Anson Huang <Anson.Huang@nxp.com>");
 MODULE_DESCRIPTION("NXP i.MX8MN clock driver");
