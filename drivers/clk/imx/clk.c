@@ -17,6 +17,8 @@
 DEFINE_SPINLOCK(imx_ccm_lock);
 EXPORT_SYMBOL_GPL(imx_ccm_lock);
 
+bool mcore_booted;
+EXPORT_SYMBOL_GPL(mcore_booted);
 bool uart_from_osc;
 
 void imx_unregister_clocks(struct clk *clks[], unsigned int count)
@@ -175,6 +177,8 @@ void imx_register_uart_clocks(unsigned int clk_count)
 		int i;
 
 		imx_uart_clocks = kcalloc(clk_count, sizeof(struct clk *), GFP_KERNEL);
+		if (!imx_uart_clocks)
+			return;
 
 		if (!of_stdout)
 			return;

@@ -149,6 +149,17 @@ static inline bool inet_bound_dev_eq(bool l3mdev_accept, int bound_dev_if,
 	return bound_dev_if == dif || bound_dev_if == sdif;
 }
 
+static inline bool inet_sk_bound_dev_eq(struct net *net, int bound_dev_if,
+					int dif, int sdif)
+{
+#if IS_ENABLED(CONFIG_NET_L3_MASTER_DEV)
+	return inet_bound_dev_eq(!!READ_ONCE(net->ipv4.sysctl_tcp_l3mdev_accept),
+				 bound_dev_if, dif, sdif);
+#else
+	return inet_bound_dev_eq(true, bound_dev_if, dif, sdif);
+#endif
+}
+
 struct inet_cork {
 	unsigned int		flags;
 	__be32			addr;
@@ -377,6 +388,18 @@ static inline bool inet_can_nonlocal_bind(struct net *net,
 {
 	return READ_ONCE(net->ipv4.sysctl_ip_nonlocal_bind) ||
 		inet->freebind || inet->transparent;
+}
+
+static inline bool inet_addr_valid_or_nonlocal(struct net *net,
+					       struct inet_sock *inet,
+					       __be32 addr,
+					       int addr_type)
+{
+	return inet_can_nonlocal_bind(net, inet) ||
+		addr == htonl(INADDR_ANY) ||
+		addr_type == RTN_LOCAL ||
+		addr_type == RTN_MULTICAST ||
+		addr_type == RTN_BROADCAST;
 }
 
 #endif	/* _INET_SOCK_H */

@@ -476,7 +476,8 @@ static int fsl_easrc_prefilter_config(struct fsl_asrc *easrc,
 	struct fsl_asrc_pair *ctx;
 	struct device *dev;
 	u32 inrate, outrate, offset = 0;
-	u32 in_s_rate, out_s_rate, in_s_fmt, out_s_fmt;
+	u32 in_s_rate, out_s_rate;
+	snd_pcm_format_t in_s_fmt, out_s_fmt;
 	int ret, i;
 
 	if (!easrc)
@@ -1572,9 +1573,10 @@ static struct snd_soc_dai_driver fsl_easrc_dai = {
 };
 
 static const struct snd_soc_component_driver fsl_easrc_component = {
-	.name		= "fsl-easrc-dai",
-	.controls       = fsl_easrc_snd_controls,
-	.num_controls   = ARRAY_SIZE(fsl_easrc_snd_controls),
+	.name			= "fsl-easrc-dai",
+	.controls		= fsl_easrc_snd_controls,
+	.num_controls		= ARRAY_SIZE(fsl_easrc_snd_controls),
+	.legacy_dai_naming	= 1,
 };
 
 static const struct reg_default fsl_easrc_reg_defaults[] = {
@@ -1875,8 +1877,8 @@ static int fsl_easrc_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct device_node *np;
 	void __iomem *regs;
+	u32 asrc_fmt = 0;
 	int ret, irq;
-	int width;
 
 	easrc = devm_kzalloc(dev, sizeof(*easrc), GFP_KERNEL);
 	if (!easrc)
@@ -1936,30 +1938,14 @@ static int fsl_easrc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = of_property_read_u32(np, "fsl,asrc-format", &easrc->asrc_format);
+	ret = of_property_read_u32(np, "fsl,asrc-format", &asrc_fmt);
+	easrc->asrc_format = (__force snd_pcm_format_t)asrc_fmt;
 	if (ret) {
-		ret = of_property_read_u32(np, "fsl,asrc-width", &width);
-		if (ret) {
-			dev_err(&pdev->dev, "failed to decide output format\n");
-			return ret;
-		}
-
-		switch (width) {
-		case 16:
-			easrc->asrc_format = SNDRV_PCM_FORMAT_S16_LE;
-			break;
-		case 24:
-			easrc->asrc_format = SNDRV_PCM_FORMAT_S24_LE;
-			break;
-		default:
-			dev_warn(&pdev->dev,
-				 "unsupported width, use default S24_LE\n");
-			easrc->asrc_format = SNDRV_PCM_FORMAT_S24_LE;
-			break;
-		}
+		dev_err(dev, "failed to asrc format\n");
+		return ret;
 	}
 
-	if (!(FSL_EASRC_FORMATS & (1ULL << easrc->asrc_format))) {
+	if (!(FSL_EASRC_FORMATS & (pcm_format_to_bits(easrc->asrc_format)))) {
 		dev_warn(dev, "unsupported format, switching to S24_LE\n");
 		easrc->asrc_format = SNDRV_PCM_FORMAT_S24_LE;
 	}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright 2021 NXP
+ * Copyright 2021-2022 NXP
  * Author: Alice Guo <alice.guo@nxp.com>
  * Author: Pankaj Gupta <pankaj.gupta@nxp.com>
  */
@@ -12,20 +12,60 @@
 #include <linux/export.h>
 #include <linux/firmware/imx/ele_base_msg.h>
 #include <linux/firmware/imx/ele_mu_ioctl.h>
+#include <linux/genalloc.h>
 #include <linux/io.h>
 #include <linux/init.h>
-#include <linux/mailbox_client.h>
 #include <linux/miscdevice.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 #include <linux/sys_soc.h>
+#include <linux/workqueue.h>
 
 #include "ele_mu.h"
 
+#define ELE_PING_INTERVAL	(3600 * HZ)
+#define ELE_TRNG_STATE_OK	0x203
+#define ELE_GET_INFO_BUFF_SZ	0x100
+#define ELE_GET_INFO_READ_SZ	0xA0
+#define ELE_IMEM_SIZE		0x10000
+#define ELE_IMEM_STATE_OK	0xCA
+#define ELE_IMEM_STATE_BAD	0xFE
+#define ELE_IMEM_STATE_WORD	0x27
+#define ELE_IMEM_STATE_MASK	0x00ff0000
+
+#define RESERVED_DMA_POOL	BIT(1)
+
 struct ele_mu_priv *ele_priv_export;
+
+struct imx_info {
+	bool socdev;
+	/* platform specific flag to enable/disable the Sentinel True RNG */
+	bool enable_ele_trng;
+	bool reserved_dma_ranges;
+};
+
+static const struct imx_info imx8ulp_info = {
+	.socdev = true,
+	.enable_ele_trng = false,
+	.reserved_dma_ranges = true,
+};
+
+static const struct imx_info imx93_info = {
+	.socdev = false,
+	.enable_ele_trng = true,
+	.reserved_dma_ranges = true,
+};
+
+static const struct of_device_id ele_mu_match[] = {
+	{ .compatible = "fsl,imx-ele", .data = (void *)&imx8ulp_info},
+	{ .compatible = "fsl,imx93-ele", .data = (void *)&imx93_info},
+	{},
+};
 
 int get_ele_mu_priv(struct ele_mu_priv **export)
 {
@@ -36,7 +76,6 @@ int get_ele_mu_priv(struct ele_mu_priv **export)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(get_ele_mu_priv);
-
 
 /*
  * Callback called by mailbox FW when data are received
@@ -119,33 +158,78 @@ static void ele_mu_rx_callback(struct mbox_client *c, void *msg)
 	wake_up_interruptible(&dev_ctx->wq);
 
 	if (is_response) {
+		priv->waiting_rsp_dev = NULL;
 		/* Allow user to send new command */
 		mutex_unlock(&priv->mu_cmd_lock);
 	}
 }
 
-struct device *imx_soc_device_register(void)
+static void ele_ping_handler(struct work_struct *work)
+{
+	int ret;
+
+	ret = ele_ping();
+	if (ret)
+		pr_err("ping ele failed, try again!\n");
+
+	/* reschedule the delay work */
+	schedule_delayed_work(to_delayed_work(work), ELE_PING_INTERVAL);
+}
+static DECLARE_DELAYED_WORK(ele_ping_work, ele_ping_handler);
+
+static int imx_soc_device_register(struct platform_device *pdev)
 {
 	struct soc_device_attribute *attr;
 	struct soc_device *dev;
+	struct gen_pool *sram_pool;
+	u32 *get_info_data;
+	phys_addr_t get_info_addr;
+	u32 soc_rev;
 	u32 v[4];
 	int err;
 
 	err = read_common_fuse(OTP_UNIQ_ID, v);
 	if (err)
-		return NULL;
+		return err;
+
+	sram_pool = of_gen_pool_get(pdev->dev.of_node, "sram-pool", 0);
+	if (!sram_pool) {
+		pr_err("Unable to get sram pool\n");
+		return -EINVAL;
+	}
+
+	get_info_data = (u32 *)gen_pool_alloc(sram_pool, 0x100);
+	if (!get_info_data) {
+		pr_err("Unable to alloc sram from sram pool\n");
+		return -ENOMEM;
+	}
+
+	get_info_addr = gen_pool_virt_to_phys(sram_pool, (ulong)get_info_data);
 
 	attr = kzalloc(sizeof(*attr), GFP_KERNEL);
 	if (!attr)
-		return NULL;
+		return -ENOMEM;
+
+	err = ele_get_info(get_info_addr, 23 * sizeof(u32));
+	if (err) {
+		attr->revision = kasprintf(GFP_KERNEL, "A0");
+	} else {
+		soc_rev = (get_info_data[1] & 0xffff0000) >> 16;
+		if (soc_rev == 0xA100)
+			attr->revision = kasprintf(GFP_KERNEL, "A1");
+		else
+			attr->revision = kasprintf(GFP_KERNEL, "A0");
+	}
+
+	gen_pool_free(sram_pool, (unsigned long)get_info_data, 0x100);
 
 	err = of_property_read_string(of_root, "model", &attr->machine);
 	if (err) {
 		kfree(attr);
-		return NULL;
+		return -EINVAL;
 	}
 	attr->family = kasprintf(GFP_KERNEL, "Freescale i.MX");
-	attr->revision = kasprintf(GFP_KERNEL, "1.0");
+
 	attr->serial_number = kasprintf(GFP_KERNEL, "%016llX", (u64)v[3] << 32 | v[0]);
 	attr->soc_id = kasprintf(GFP_KERNEL, "i.MX8ULP");
 
@@ -157,10 +241,44 @@ struct device *imx_soc_device_register(void)
 		kfree(attr->family);
 		kfree(attr->machine);
 		kfree(attr);
-		return ERR_CAST(dev);
+		return PTR_ERR(dev);
 	}
 
-	return soc_device_to_device(dev);
+	return 0;
+}
+
+static int ele_do_start_rng(void)
+{
+	int ret;
+	int count = 5;
+
+	ret = ele_get_trng_state();
+	if (ret < 0) {
+		pr_err("Failed to get trng state\n");
+		return ret;
+	} else if (ret != ELE_TRNG_STATE_OK) {
+		/* call start rng */
+		ret = ele_start_rng();
+		if (ret) {
+			pr_err("Failed to start rng\n");
+			return ret;
+		}
+
+		/* poll get trng state API 5 times or while trng state != 0x203 */
+		do {
+			msleep(10);
+			ret = ele_get_trng_state();
+			if (ret < 0) {
+				pr_err("Failed to get trng state\n");
+				return ret;
+			}
+			count--;
+		} while ((ret != ELE_TRNG_STATE_OK) && count);
+		if (ret != ELE_TRNG_STATE_OK)
+			return -EIO;
+	}
+
+	return 0;
 }
 
 /*
@@ -169,10 +287,11 @@ struct device *imx_soc_device_register(void)
 
 /* Write a message to the MU. */
 static ssize_t ele_mu_fops_write(struct file *fp, const char __user *buf,
-				    size_t size, loff_t *ppos)
+				  size_t size, loff_t *ppos)
 {
 	struct ele_mu_device_ctx *dev_ctx = container_of(fp->private_data,
-					   struct ele_mu_device_ctx, miscdev);
+							 struct ele_mu_device_ctx,
+							 miscdev);
 	struct ele_mu_priv *ele_mu_priv = dev_ctx->priv;
 	u32 nb_words = 0;
 	struct mu_hdr header;
@@ -277,7 +396,8 @@ static ssize_t ele_mu_fops_read(struct file *fp, char __user *buf,
 				 size_t size, loff_t *ppos)
 {
 	struct ele_mu_device_ctx *dev_ctx = container_of(fp->private_data,
-					   struct ele_mu_device_ctx, miscdev);
+							 struct ele_mu_device_ctx,
+							 miscdev);
 	u32 data_size = 0, size_to_copy = 0;
 	struct ele_obuf_desc *b_desc;
 	int err;
@@ -382,7 +502,7 @@ exit:
 }
 
 static int ele_mu_ioctl_get_mu_info(struct ele_mu_device_ctx *dev_ctx,
-				  unsigned long arg)
+				    unsigned long arg)
 {
 	struct ele_mu_priv *priv = dev_get_drvdata(dev_ctx->dev);
 	struct ele_mu_ioctl_get_mu_info info;
@@ -391,7 +511,7 @@ static int ele_mu_ioctl_get_mu_info(struct ele_mu_device_ctx *dev_ctx,
 	info.ele_mu_id = (u8)priv->ele_mu_id;
 	info.interrupt_idx = 0;
 	info.tz = 0;
-	info.did = 0x7;
+	info.did = (u8)priv->ele_mu_did;
 
 	devctx_dbg(dev_ctx,
 		   "info [mu_idx: %d, irq_idx: %d, tz: 0x%x, did: 0x%x]\n",
@@ -414,7 +534,7 @@ exit:
  * messages
  */
 static int ele_mu_ioctl_setup_iobuf_handler(struct ele_mu_device_ctx *dev_ctx,
-					       unsigned long arg)
+					    unsigned long arg)
 {
 	struct ele_obuf_desc *out_buf_desc;
 	struct ele_mu_ioctl_setup_iobuf io = {0};
@@ -560,8 +680,8 @@ static int ele_mu_fops_open(struct inode *nd, struct file *fp)
 	}
 
 	err = ele_mu_setup_ele_mem_access(dev_ctx,
-						dev_ctx->non_secure_mem.dma_addr,
-						MAX_DATA_SIZE_PER_USER);
+					  dev_ctx->non_secure_mem.dma_addr,
+					  MAX_DATA_SIZE_PER_USER);
 	if (err) {
 		err = -EPERM;
 		devctx_err(dev_ctx,
@@ -651,8 +771,8 @@ exit:
 static long ele_mu_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	struct ele_mu_device_ctx *dev_ctx = container_of(fp->private_data,
-							    struct ele_mu_device_ctx,
-							    miscdev);
+							 struct ele_mu_device_ctx,
+							 miscdev);
 	struct ele_mu_priv *ele_mu_priv = dev_ctx->priv;
 	int err = -EINVAL;
 
@@ -746,9 +866,11 @@ static int ele_mu_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct ele_mu_priv *priv;
 	struct device_node *np;
+	const struct of_device_id *of_id = of_match_device(ele_mu_match, dev);
+	struct imx_info *info = (of_id != NULL) ? (struct imx_info *)of_id->data
+						: NULL;
 	int max_nb_users = 0;
 	char *devname;
-	struct device *soc;
 	int ret;
 	int i;
 
@@ -767,7 +889,7 @@ static int ele_mu_probe(struct platform_device *pdev)
 	np = pdev->dev.of_node;
 	if (!np) {
 		dev_err(dev, "Cannot find MU User entry in device tree\n");
-		ret = -ENOTSUPP;
+		ret = -EOPNOTSUPP;
 		goto exit;
 	}
 
@@ -779,10 +901,18 @@ static int ele_mu_probe(struct platform_device *pdev)
 	priv->cmd_receiver_dev = NULL;
 	priv->waiting_rsp_dev = NULL;
 
+	ret = of_property_read_u32(np, "fsl,ele_mu_did", &priv->ele_mu_did);
+	if (ret) {
+		ret = -EINVAL;
+		dev_err(dev, "%s: Not able to read ele_mu_did", __func__);
+		goto exit;
+	}
+
 	ret = of_property_read_u32(np, "fsl,ele_mu_id", &priv->ele_mu_id);
 	if (ret) {
-		dev_warn(dev, "%s: Not able to read mu_id", __func__);
-		priv->ele_mu_id = S4_DEFAULT_MUAP_INDEX;
+		ret = -EINVAL;
+		dev_err(dev, "%s: Not able to read ele_mu_id", __func__);
+		goto exit;
 	}
 
 	ret = of_property_read_u32(np, "fsl,ele_mu_max_users", &max_nb_users);
@@ -825,6 +955,9 @@ static int ele_mu_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	priv->max_dev_ctx = max_nb_users;
+	priv->ctxs = devm_kzalloc(dev, sizeof(dev_ctx) * max_nb_users, GFP_KERNEL);
+
 	/* Create users */
 	for (i = 0; i < max_nb_users; i++) {
 		dev_ctx = devm_kzalloc(dev, sizeof(*dev_ctx), GFP_KERNEL);
@@ -838,6 +971,9 @@ static int ele_mu_probe(struct platform_device *pdev)
 		dev_ctx->dev = dev;
 		dev_ctx->status = MU_FREE;
 		dev_ctx->priv = priv;
+
+		priv->ctxs[i] = dev_ctx;
+
 		/* Default value invalid for an header. */
 		init_waitqueue_head(&dev_ctx->wq);
 
@@ -866,7 +1002,12 @@ static int ele_mu_probe(struct platform_device *pdev)
 
 		ret = devm_add_action(dev, if_misc_deregister,
 				      &dev_ctx->miscdev);
-
+		if (ret) {
+			dev_err(dev,
+				"failed[%d] to add action to the misc-dev\n",
+				ret);
+			goto exit;
+		}
 	}
 
 	init_completion(&priv->done);
@@ -874,16 +1015,63 @@ static int ele_mu_probe(struct platform_device *pdev)
 
 	ele_priv_export = priv;
 
-	soc = imx_soc_device_register();
-	if (IS_ERR(soc)) {
-		pr_err("failed to register SoC device: %ld\n", PTR_ERR(soc));
-		return PTR_ERR(soc);
+	if (info && info->reserved_dma_ranges) {
+		ret = of_reserved_mem_device_init(dev);
+		if (ret) {
+			dev_err(dev, "failed to init reserved memory region %d\n", ret);
+			priv->flags &= (~RESERVED_DMA_POOL);
+			goto exit;
+		}
+		priv->flags |= RESERVED_DMA_POOL;
 	}
+
+	if (info && info->socdev) {
+		ret = imx_soc_device_register(pdev);
+		if (ret) {
+			dev_err(dev,
+				"failed[%d] to register SoC device\n", ret);
+			goto exit;
+		}
+
+		/* allocate buffer where sentinel store encrypted IMEM */
+		priv->imem.buf = dmam_alloc_coherent(dev, ELE_IMEM_SIZE,
+						     &priv->imem.phyaddr,
+						     GFP_KERNEL);
+		if (!priv->imem.buf) {
+			dev_err(dev, "Failed to alloc buffer to store encrypted IMEM\n");
+			ret = -ENOMEM;
+			goto exit;
+		}
+	}
+
+	/* start ele rng */
+	ret = ele_do_start_rng();
+	if (ret)
+		dev_err(dev, "Failed to start ele rng\n");
+
+	if (!ret && info && info->enable_ele_trng) {
+		ret = ele_trng_init(dev);
+		if (ret)
+			dev_err(dev, "Failed to init ele-trng\n");
+	}
+
+	/*
+	 * A ELE ping request must be send at least once every day(24 hours),
+	 * so setup a delay work with 1 hour interval to ping sentinel periodically.
+	 */
+	schedule_delayed_work(&ele_ping_work, ELE_PING_INTERVAL);
 
 	dev_set_drvdata(dev, priv);
 	return devm_of_platform_populate(dev);
 
 exit:
+	/* if execution control reaches here, ele-mu probe fail.
+	 * hence doing the cleanup
+	 */
+	if (priv->flags & RESERVED_DMA_POOL) {
+		of_reserved_mem_device_release(dev);
+		priv->flags &= (~RESERVED_DMA_POOL);
+	}
 	return ret;
 }
 
@@ -891,26 +1079,150 @@ static int ele_mu_remove(struct platform_device *pdev)
 {
 	struct ele_mu_priv *priv;
 
+	cancel_delayed_work_sync(&ele_ping_work);
 	priv = dev_get_drvdata(&pdev->dev);
 	mbox_free_channel(priv->tx_chan);
 	mbox_free_channel(priv->rx_chan);
 
+	/* free the buffer in ele-mu remove, previously allocated
+	 * in ele-mu probe to store encrypted IMEM
+	 */
+	if (priv->imem.buf) {
+		dmam_free_coherent(&pdev->dev, ELE_IMEM_SIZE, priv->imem.buf, priv->imem.phyaddr);
+		priv->imem.buf = NULL;
+	}
+
+	if (priv->flags & RESERVED_DMA_POOL) {
+		of_reserved_mem_device_release(&pdev->dev);
+		priv->flags &= (~RESERVED_DMA_POOL);
+	}
+
 	return 0;
 }
 
-static const struct of_device_id ele_mu_match[] = {
-	{ .compatible = "fsl,imx-ele", },
-	{},
+#ifdef CONFIG_PM_SLEEP
+static int ele_mu_suspend(struct device *dev)
+{
+	struct ele_mu_priv *priv = dev_get_drvdata(dev);
+	const struct of_device_id *of_id = of_match_device(ele_mu_match, dev);
+	struct imx_info *info = (of_id != NULL) ? (struct imx_info *)of_id->data : NULL;
+
+	if (info && info->socdev) {
+		int ret;
+
+		/* EXPORT command will save encrypted IMEM to given address,
+		 * so later in resume, IMEM can be restored from the given address.
+		 * size must be at least 64 kB.
+		 */
+		ret = ele_service_swap(priv->imem.phyaddr, ELE_IMEM_SIZE, ELE_IMEM_EXPORT);
+		if (ret < 0)
+			dev_err(dev, "Failed to export IMEM\n");
+		else {
+			priv->imem.size = ret;
+			dev_info(dev, "Exported %d bytes of encrypted IMEM\n", ret);
+		}
+	}
+
+	return 0;
+}
+
+static int ele_mu_resume(struct device *dev)
+{
+	struct ele_mu_priv *priv = dev_get_drvdata(dev);
+	int i;
+	const struct of_device_id *of_id = of_match_device(ele_mu_match, dev);
+	struct imx_info *info = (of_id != NULL) ? (struct imx_info *)of_id->data : NULL;
+
+	for (i = 0; i < priv->max_dev_ctx; i++)
+		wake_up_interruptible(&priv->ctxs[i]->wq);
+
+	if (info && info->socdev) {
+		struct gen_pool *sram_pool;
+		u32 *get_info_buf;
+		phys_addr_t get_info_phyaddr;
+		u32 imem_state;
+		int ret;
+
+		ret = ele_do_start_rng();
+		if (ret)
+			return ret;
+
+		/* allocate buffer to get info from sentinel */
+		sram_pool = of_gen_pool_get(dev->of_node, "sram-pool", 0);
+		if (!sram_pool) {
+			dev_err(dev, "Unable to get sram pool\n");
+			return -EINVAL;
+		}
+
+		get_info_buf = (u32 *)gen_pool_alloc(sram_pool, ELE_GET_INFO_BUFF_SZ);
+		if (!get_info_buf) {
+			dev_err(dev, "Unable to alloc sram from sram pool\n");
+			return -ENOMEM;
+		}
+		get_info_phyaddr = gen_pool_virt_to_phys(sram_pool, (ulong)get_info_buf);
+
+		/* get info from sentinel */
+		ret = ele_get_info(get_info_phyaddr, ELE_GET_INFO_READ_SZ);
+		if (ret) {
+			dev_err(dev, "Failed to get info from sentinel\n");
+			goto exit;
+		}
+
+		/* Get IMEM state, if 0xFE then import IMEM */
+		imem_state = (get_info_buf[ELE_IMEM_STATE_WORD] & ELE_IMEM_STATE_MASK) >> 16;
+		if (imem_state == ELE_IMEM_STATE_BAD) {
+			/* IMPORT command will restore IMEM from the given address,
+			 * here size is the actual size returned by sentinel
+			 * during the export operation
+			 */
+			ret = ele_service_swap(priv->imem.phyaddr,
+					       priv->imem.size,
+					       ELE_IMEM_IMPORT);
+			if (ret) {
+				dev_err(dev, "Failed to import IMEM\n");
+				goto exit;
+			}
+		} else
+			goto exit;
+
+		/* After importing IMEM, check if IMEM state is 0xCA to make sure
+		 * IMEM is fully loaded and ELE functionality can be used
+		 */
+		ret = ele_get_info(get_info_phyaddr, ELE_GET_INFO_READ_SZ);
+		if (ret) {
+			dev_err(dev, "Failed to get info from sentinel\n");
+			goto exit;
+		}
+
+		imem_state = (get_info_buf[ELE_IMEM_STATE_WORD] & ELE_IMEM_STATE_MASK) >> 16;
+		if (imem_state == ELE_IMEM_STATE_OK)
+			dev_info(dev, "Successfully restored IMEM\n");
+		else
+			dev_err(dev, "Failed to restore IMEM\n");
+
+exit:
+	gen_pool_free(sram_pool, (ulong)get_info_buf, ELE_GET_INFO_BUFF_SZ);
+	}
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops ele_mu_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(ele_mu_suspend, ele_mu_resume)
 };
 
 static struct platform_driver ele_mu_driver = {
 	.driver = {
 		.name = "fsl-ele-mu",
 		.of_match_table = ele_mu_match,
+		.pm = &ele_mu_pm,
 	},
 	.probe = ele_mu_probe,
 	.remove = ele_mu_remove,
 };
+MODULE_DEVICE_TABLE(of, ele_mu_match);
+
 module_platform_driver(ele_mu_driver);
 
 MODULE_AUTHOR("Pankaj Gupta <pankaj.gupta@nxp.com>");

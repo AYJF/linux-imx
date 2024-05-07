@@ -5,6 +5,7 @@
  * it under the terms of the gnu general public license version 2 as
  * published by the free software foundation.
  */
+#include <linux/media-bus-format.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/component.h>
@@ -172,6 +173,9 @@ static int cdns_mhdp_imx_bind(struct device *dev, struct device *master,
 		return -ENOMEM;
 
 	match = of_match_node(cdns_mhdp_imx_dt_ids, pdev->dev.of_node);
+	if (!match)
+		return -EFAULT;
+
 	plat_data = match->data;
 	encoder = &imx_mhdp->encoder;
 

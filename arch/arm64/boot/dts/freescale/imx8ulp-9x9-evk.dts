@@ -15,7 +15,7 @@
 
 		power-on {
 			label = "PowerOn";
-			gpios = <&gpiof 26 GPIO_ACTIVE_LOW>;
+			gpios = <&gpiof 11 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_POWER>;
 		};
 	};
@@ -57,7 +57,7 @@
 
 &pinctrl_gpio_keys {
 	fsl,pins = <
-		MX8ULP_PAD_PTF26__PTF26		0x3
+		MX8ULP_PAD_PTF11__PTF11		0x3
 	>;
 };
 
@@ -111,7 +111,7 @@
 	pinctrl-1 = <&pinctrl_sai6>;
 	assigned-clocks = <&cgc2 IMX8ULP_CLK_SAI6_SEL>;
 	assigned-clock-parents = <&cgc1 IMX8ULP_CLK_SPLL3_PFD1_DIV1>;
-	fsl,dataline = <0 0x01 0x04>;
+	fsl,dataline = <1 0x01 0x04>;
 	status = "okay";
 };
 

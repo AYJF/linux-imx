@@ -125,40 +125,36 @@ static int vsi_enc_s_parm(struct file *filp, void *priv, struct v4l2_streamparm 
 	v4l2_klog(LOGLVL_CONFIG, "%s", __func__);
 	if (!vsi_v4l2_daemonalive())
 		return -ENODEV;
+
 	if (!isvalidtype(parm->type, ctx->flag))
+		return -EINVAL;
+
+	if (!binputqueue(parm->type))
 		return -EINVAL;
 
 	if (mutex_lock_interruptible(&ctx->ctxlock))
 		return -EBUSY;
-	if (binputqueue(parm->type)) {
-		memset(parm->parm.output.reserved, 0, sizeof(parm->parm.output.reserved));
-		if (!parm->parm.output.timeperframe.denominator)
-			parm->parm.output.timeperframe.denominator = ctx->mediacfg.outputparam.timeperframe.denominator;
-		else
-			ctx->mediacfg.outputparam.timeperframe.denominator = parm->parm.output.timeperframe.denominator;
-		if (!parm->parm.output.timeperframe.numerator)
-			parm->parm.output.timeperframe.numerator = ctx->mediacfg.outputparam.timeperframe.numerator;
-		else
-			ctx->mediacfg.outputparam.timeperframe.numerator = parm->parm.output.timeperframe.numerator;
-		ctx->mediacfg.encparams.general.inputRateNumer = parm->parm.output.timeperframe.denominator;
-		ctx->mediacfg.encparams.general.inputRateDenom = parm->parm.output.timeperframe.numerator;
-		parm->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
-	} else {
-		memset(parm->parm.capture.reserved, 0, sizeof(parm->parm.capture.reserved));
-		if (!parm->parm.capture.timeperframe.denominator)
-			parm->parm.capture.timeperframe.denominator = ctx->mediacfg.capparam.timeperframe.denominator;
-		else
-			ctx->mediacfg.capparam.timeperframe.denominator = parm->parm.capture.timeperframe.denominator;
-		if (!parm->parm.capture.timeperframe.numerator)
-			parm->parm.capture.timeperframe.numerator = ctx->mediacfg.capparam.timeperframe.numerator;
-		else
-			ctx->mediacfg.capparam.timeperframe.numerator = parm->parm.capture.timeperframe.numerator;
-		ctx->mediacfg.encparams.general.outputRateNumer = parm->parm.capture.timeperframe.denominator;
-		ctx->mediacfg.encparams.general.outputRateDenom = parm->parm.capture.timeperframe.numerator;
-		parm->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	}
+
+	memset(parm->parm.output.reserved, 0, sizeof(parm->parm.output.reserved));
+	if (!parm->parm.output.timeperframe.denominator)
+		parm->parm.output.timeperframe.denominator = ctx->mediacfg.outputparam.timeperframe.denominator;
+	else
+		ctx->mediacfg.outputparam.timeperframe.denominator = parm->parm.output.timeperframe.denominator;
+	if (!parm->parm.output.timeperframe.numerator)
+		parm->parm.output.timeperframe.numerator = ctx->mediacfg.outputparam.timeperframe.numerator;
+	else
+		ctx->mediacfg.outputparam.timeperframe.numerator = parm->parm.output.timeperframe.numerator;
+	ctx->mediacfg.encparams.general.inputRateNumer = parm->parm.output.timeperframe.denominator;
+	ctx->mediacfg.encparams.general.inputRateDenom = parm->parm.output.timeperframe.numerator;
+	ctx->mediacfg.encparams.general.outputRateNumer = parm->parm.output.timeperframe.denominator;
+	ctx->mediacfg.encparams.general.outputRateDenom = parm->parm.output.timeperframe.numerator;
+	parm->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
+
 	set_bit(CTX_FLAG_CONFIGUPDATE_BIT, &ctx->flag);
 	mutex_unlock(&ctx->ctxlock);
+
+	v4l2_klog(LOGLVL_BRIEF, "%lx:%s set fps number %d,denom %d\n",
+		ctx->ctxid, __func__,  ctx->mediacfg.encparams.general.inputRateNumer, ctx->mediacfg.encparams.general.inputRateDenom);
 	return 0;
 }
 
@@ -171,10 +167,11 @@ static int vsi_enc_g_parm(struct file *filp, void *priv, struct v4l2_streamparm 
 		return -ENODEV;
 	if (!isvalidtype(parm->type, ctx->flag))
 		return -EINVAL;
-	if (binputqueue(parm->type))
-		parm->parm.output = ctx->mediacfg.outputparam;
-	else
-		parm->parm.capture = ctx->mediacfg.capparam;
+	if (!binputqueue(parm->type))
+		return -EINVAL;
+
+	parm->parm.output = ctx->mediacfg.outputparam;
+
 	return 0;
 }
 
@@ -495,7 +492,7 @@ static int vsi_enc_try_fmt(struct file *file, void *prv, struct v4l2_format *f)
 	if (!vsi_v4l2_daemonalive())
 		return -ENODEV;
 
-	vsiv4l2_verifyfmt(ctx, f);
+	vsiv4l2_verifyfmt(ctx, f, 1);
 	return 0;
 }
 
@@ -1018,7 +1015,7 @@ static int vsi_v4l2_enc_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 /********* for ext ctrl *************/
-static bool vsi_enc_ctrl_equal(const struct v4l2_ctrl *ctrl, u32 idx,
+static bool vsi_enc_ctrl_equal(const struct v4l2_ctrl *ctrl,
 		      union v4l2_ctrl_ptr ptr1,
 		      union v4l2_ctrl_ptr ptr2)
 {
@@ -1026,12 +1023,12 @@ static bool vsi_enc_ctrl_equal(const struct v4l2_ctrl *ctrl, u32 idx,
 	return 0;
 }
 
-static void vsi_enc_ctrl_init(const struct v4l2_ctrl *ctrl, u32 idx,
-		     union v4l2_ctrl_ptr ptr)
+static void vsi_enc_ctrl_init(const struct v4l2_ctrl *ctrl, u32 from_idx,
+			      union v4l2_ctrl_ptr ptr)
 {
-	void *p = ptr.p + idx * ctrl->elem_size;
+	void *p = ptr.p + from_idx * ctrl->elem_size;
 
-	memset(p, 0, ctrl->elem_size);
+	memset(p, 0, (ctrl->elems - from_idx) * ctrl->elem_size);
 }
 
 static void vsi_enc_ctrl_log(const struct v4l2_ctrl *ctrl)
@@ -1039,7 +1036,7 @@ static void vsi_enc_ctrl_log(const struct v4l2_ctrl *ctrl)
 	//do nothing now
 }
 
-static int vsi_enc_ctrl_validate(const struct v4l2_ctrl *ctrl, u32 idx,
+static int vsi_enc_ctrl_validate(const struct v4l2_ctrl *ctrl,
 			union v4l2_ctrl_ptr ptr)
 {
 	//always true
@@ -1530,9 +1527,21 @@ static int v4l2_enc_mmap(struct file *filp, struct vm_area_struct *vma)
 static __poll_t vsi_enc_poll(struct file *file, poll_table *wait)
 {
 	__poll_t ret = 0;
+	struct v4l2_fh *fh = file->private_data;
 	struct vsi_v4l2_ctx *ctx = fh_to_ctx(file->private_data);
 	int dstn = atomic_read(&ctx->dstframen);
 	int srcn = atomic_read(&ctx->srcframen);
+
+	/*
+	 * poll_wait() MUST be called on the first invocation on all the
+	 * potential queues of interest, even if we are not interested in their
+	 * events during this first call. Failure to do so will result in
+	 * queue's events to be ignored because the poll_table won't be capable
+	 * of adding new wait queues thereafter.
+	 */
+	poll_wait(file, &ctx->input_que.done_wq, wait);
+	poll_wait(file, &ctx->output_que.done_wq, wait);
+	poll_wait(file, &fh->wait, wait);
 
 	if (!vsi_v4l2_daemonalive())
 		ret |= POLLERR;

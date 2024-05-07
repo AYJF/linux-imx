@@ -354,6 +354,11 @@ static int cs42xx8_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
+	if (cs42xx8->is_tdm && !tx && cs42xx8->rate[tx] > 100000) {
+		dev_err(component->dev, "ADC does not support Quad-Speed Mode in the TDM format\n");
+		return -EINVAL;
+	}
+
 	mask = CS42XX8_FUNCMOD_MFREQ_MASK;
 	val = cs42xx8_ratios[i].mfreq;
 
@@ -517,7 +522,6 @@ static const struct snd_soc_component_driver cs42xx8_driver = {
 	.num_dapm_routes	= ARRAY_SIZE(cs42xx8_dapm_routes),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 const struct cs42xx8_driver_data cs42448_data = {

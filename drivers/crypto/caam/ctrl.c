@@ -86,6 +86,7 @@ static const struct of_device_id imx8m_machine_match[] = {
 	{ .compatible = "fsl,imx8mn", },
 	{ .compatible = "fsl,imx8mp", },
 	{ .compatible = "fsl,imx8mq", },
+	{ .compatible = "fsl,imx8ulp", },
 	{ }
 };
 
@@ -1172,6 +1173,28 @@ set_dma_mask:
 					       caam_dma_dev);
 		if (ret)
 			return ret;
+	}
+
+	comp_params = rd_reg32(&perfmon->comp_parms_ls);
+	ctrlpriv->blob_present = !!(comp_params & CTPR_LS_BLOB);
+
+	/*
+	 * Some SoCs like the LS1028A (non-E) indicate CTPR_LS_BLOB support,
+	 * but fail when actually using it due to missing AES support, so
+	 * check both here.
+	 */
+	if (ctrlpriv->era < 10) {
+		ctrlpriv->blob_present = ctrlpriv->blob_present &&
+			(rd_reg32(&perfmon->cha_num_ls) & CHA_ID_LS_AES_MASK);
+	} else {
+		struct version_regs __iomem *vreg;
+
+		vreg = ctrlpriv->total_jobrs ?
+			(struct version_regs *)&ctrlpriv->jr[0]->vreg :
+			(struct version_regs *)&ctrl->vreg;
+
+		ctrlpriv->blob_present = ctrlpriv->blob_present &&
+			(rd_reg32(&vreg->aesa) & CHA_VER_MISC_AES_NUM_MASK);
 	}
 
 	if (reg_access) {

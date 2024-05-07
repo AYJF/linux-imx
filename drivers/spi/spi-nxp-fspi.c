@@ -50,6 +50,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/pm_runtime.h>
 #include <linux/pm_qos.h>
 #include <linux/regmap.h>
 #include <linux/sizes.h>
@@ -59,11 +60,8 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
 
-#include <linux/pm_runtime.h>
-
 /* runtime pm timeout */
-#define FSPI_RPM_TIMEOUT 50 /* 50ms */
-
+#define FSPI_RPM_TIMEOUT 50	/* 50ms */
 /*
  * The driver only uses one single LUT entry, that is updated on
  * each call of exec_op(). Index 0 is preset at boot with a basic
@@ -331,8 +329,8 @@
 /* Access flash memory using IP bus only */
 #define FSPI_QUIRK_USE_IP_ONLY	BIT(0)
 
-/* Disable Octal DTR */
-#define NXP_FSPI_QUIRK_DISABLE_DTR	BIT(1)
+/* Disable DTR */
+#define FSPI_QUIRK_DISABLE_DTR	BIT(1)
 
 struct nxp_fspi_devtype_data {
 	unsigned int rxfifo;
@@ -346,7 +344,7 @@ static struct nxp_fspi_devtype_data lx2160a_data = {
 	.rxfifo = SZ_512,       /* (64  * 64 bits)  */
 	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
 	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
-	.quirks = NXP_FSPI_QUIRK_DISABLE_DTR,
+	.quirks = FSPI_QUIRK_DISABLE_DTR,
 	.little_endian = true,  /* little-endian    */
 };
 
@@ -382,6 +380,7 @@ struct nxp_fspi {
 	u32 memmap_start;
 	u32 memmap_len;
 	u32 dll_slvdly;
+	bool individual_mode;
 	struct clk *clk, *clk_en;
 	struct device *dev;
 	struct completion c;
@@ -398,11 +397,6 @@ struct nxp_fspi {
 static inline int needs_ip_only(struct nxp_fspi *f)
 {
 	return f->devtype_data->quirks & FSPI_QUIRK_USE_IP_ONLY;
-}
-
-static inline int nxp_fspi_disable_dtr(struct nxp_fspi *f)
-{
-	return f->devtype_data->quirks & NXP_FSPI_QUIRK_DISABLE_DTR;
 }
 
 /*
@@ -505,10 +499,6 @@ static bool nxp_fspi_supports_op(struct spi_mem *mem,
 	if (op->data.dir == SPI_MEM_DATA_OUT &&
 	    op->data.nbytes > f->devtype_data->txfifo)
 		return false;
-
-	if (!nxp_fspi_disable_dtr(f) &&
-		op->cmd.dtr && op->addr.dtr && op->dummy.dtr && op->data.dtr)
-		return spi_mem_dtr_supports_op(mem, op);
 
 	return spi_mem_default_supports_op(mem, op);
 }
@@ -627,7 +617,7 @@ static int nxp_fspi_clk_prep_enable(struct nxp_fspi *f)
 {
 	int ret;
 
-	if (is_acpi_node(f->dev->fwnode))
+	if (is_acpi_node(dev_fwnode(f->dev)))
 		return 0;
 
 	ret = clk_prepare_enable(f->clk_en);
@@ -645,7 +635,7 @@ static int nxp_fspi_clk_prep_enable(struct nxp_fspi *f)
 
 static int nxp_fspi_clk_disable_unprep(struct nxp_fspi *f)
 {
-	if (is_acpi_node(f->dev->fwnode))
+	if (is_acpi_node(dev_fwnode(f->dev)))
 		return 0;
 
 	clk_disable_unprepare(f->clk);
@@ -1168,9 +1158,14 @@ static int nxp_fspi_default_setup(struct nxp_fspi *f)
 	}
 
 	/* enable module */
-	fspi_writel(f, FSPI_MCR0_AHB_TIMEOUT(0xFF) |
-		    FSPI_MCR0_IP_TIMEOUT(0xFF) | (u32) FSPI_MCR0_OCTCOMB_EN,
-		    base + FSPI_MCR0);
+	reg = FSPI_MCR0_AHB_TIMEOUT(0xFF) | FSPI_MCR0_IP_TIMEOUT(0xFF);
+
+	/* if there are individual devices connected to each fspi port, */
+	/* please enable individual mode in DT. */
+	if (!f->individual_mode)
+		reg |= FSPI_MCR0_OCTCOMB_EN;
+
+	fspi_writel(f, reg, base + FSPI_MCR0);
 
 	/*
 	 * Disable same device enable bit and configure all slave devices
@@ -1238,6 +1233,14 @@ static const struct spi_controller_mem_ops nxp_fspi_mem_ops = {
 	.get_name = nxp_fspi_get_name,
 };
 
+static const struct spi_controller_mem_caps nxp_fspi_mem_caps = {
+	.dtr = true,
+};
+
+static const struct spi_controller_mem_caps nxp_fspi_mem_caps_quirks = {
+	.dtr = false,
+};
+
 static int nxp_fspi_probe(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr;
@@ -1266,7 +1269,7 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, f);
 
 	/* find the resources - configuration register address space */
-	if (is_acpi_node(f->dev->fwnode))
+	if (is_acpi_node(dev_fwnode(f->dev)))
 		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	else
 		res = platform_get_resource_byname(pdev,
@@ -1279,7 +1282,7 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	}
 
 	/* find the resources - controller memory mapped space */
-	if (is_acpi_node(f->dev->fwnode))
+	if (is_acpi_node(dev_fwnode(f->dev)))
 		res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	else
 		res = platform_get_resource_byname(pdev,
@@ -1340,11 +1343,19 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	/* check if need to set the slave delay line */
 	of_property_read_u32(np, "nxp,fspi-dll-slvdly", &f->dll_slvdly);
 
+	/* check if the controller work in combination or individual mode */
+	f->individual_mode = of_property_read_bool(np,
+						   "nxp,fspi-individual-mode");
+
 	mutex_init(&f->lock);
 
 	ctlr->bus_num = -1;
 	ctlr->num_chipselect = NXP_FSPI_MAX_CHIPSELECT;
 	ctlr->mem_ops = &nxp_fspi_mem_ops;
+	if (f->devtype_data->quirks & FSPI_QUIRK_DISABLE_DTR)
+		ctlr->mem_caps = &nxp_fspi_mem_caps_quirks;
+	else
+		ctlr->mem_caps = &nxp_fspi_mem_caps;
 
 	nxp_fspi_default_setup(f);
 
@@ -1400,13 +1411,14 @@ static int nxp_fspi_initialized(struct nxp_fspi *f)
 
 static int nxp_fspi_need_reinit(struct nxp_fspi *f)
 {
-	/* we always use the controller in combination mode, so we check this */
-	/* register bit to determine if the controller once lost power, such as */
-	/* suspend/resume, and need to be re-init */
+	/*
+	 * MCR2 SAMEDEVICEEN was set by default, so we check this
+	 * register bit to determine if the controller once lost
+	 * power, such as suspend/resume, and need to be re-init.
+	 */
 
-	return !(readl(f->iobase + FSPI_MCR0) & FSPI_MCR0_OCTCOMB_EN);
+	return (readl(f->iobase + FSPI_MCR2) & FSPI_MCR2_SAMEDEVICEEN);
 }
-
 
 static int nxp_fspi_runtime_suspend(struct device *dev)
 {
@@ -1457,12 +1469,12 @@ static int nxp_fspi_resume(struct device *dev)
 	return ret;
 }
 
+
 static const struct dev_pm_ops nxp_fspi_pm_ops = {
 	SET_RUNTIME_PM_OPS(nxp_fspi_runtime_suspend, nxp_fspi_runtime_resume, NULL)
 	SET_SYSTEM_SLEEP_PM_OPS(nxp_fspi_suspend, nxp_fspi_resume)
 };
-
-#endif /* CONFIG_PM */
+#endif	/* CONFIG_PM */
 
 static const struct of_device_id nxp_fspi_dt_ids[] = {
 	{ .compatible = "nxp,lx2160a-fspi", .data = (void *)&lx2160a_data, },
