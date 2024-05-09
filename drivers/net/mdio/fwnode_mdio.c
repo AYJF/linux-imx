@@ -8,8 +8,6 @@
 
 #include <linux/acpi.h>
 #include <linux/fwnode_mdio.h>
-#include <linux/gpio/consumer.h>
-#include <linux/gpio/driver.h>
 #include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
@@ -120,8 +118,6 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 	bool is_c45 = false;
 	u32 phy_id;
 	int rc;
-	int reset_deassert_delay = 0;
-	struct gpio_desc *reset_gpio;
 
 	psec = fwnode_find_pse_control(child);
 	if (IS_ERR(psec))
@@ -138,31 +134,10 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 	if (rc >= 0)
 		is_c45 = true;
 
-	reset_gpio = fwnode_gpiod_get_index(child, "reset", 0, GPIOD_OUT_LOW, "PHY reset");
-	if (reset_gpio == ERR_PTR(-EPROBE_DEFER)) {
-		dev_dbg(&bus->dev, "reset signal for PHY@%u not ready\n", addr);
-		return -EPROBE_DEFER;
-	} else if (IS_ERR(reset_gpio)) {
-		if (reset_gpio == ERR_PTR(-ENOENT))
-			dev_dbg(&bus->dev, "reset signal for PHY@%u not defined\n", addr);
-		else
-			dev_dbg(&bus->dev, "failed to request reset for PHY@%u, error %ld\n", addr, PTR_ERR(reset_gpio));
-		reset_gpio = NULL;
-	} else {
-		dev_dbg(&bus->dev, "deassert reset signal for PHY@%u\n", addr);
-		fwnode_property_read_u32(child, "reset-deassert-us",
-					 &reset_deassert_delay);
-		if (reset_deassert_delay)
-			fsleep(reset_deassert_delay);
-	}
-
 	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
 		phy = get_phy_device(bus, addr, is_c45);
 	else
 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
-
-	gpiochip_free_own_desc(reset_gpio);
-
 	if (IS_ERR(phy)) {
 		rc = PTR_ERR(phy);
 		goto clean_mii_ts;
@@ -210,3 +185,53 @@ clean_pse:
 	return rc;
 }
 EXPORT_SYMBOL(fwnode_mdiobus_register_phy);
+
+bool fwnode_mdiobus_child_is_phy(struct fwnode_handle *child)
+{
+	u32 phy_id;
+
+	if (fwnode_get_phy_id(child, &phy_id) != -EINVAL)
+		return true;
+
+	if (fwnode_property_match_string(child, "compatible",
+					 "ethernet-phy-ieee802.3-c45") >= 0)
+		return true;
+
+	if (fwnode_property_match_string(child, "compatible",
+					 "ethernet-phy-ieee802.3-c22") >= 0)
+		return true;
+
+	if (!fwnode_property_present(child, "compatible"))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(fwnode_mdiobus_child_is_phy);
+
+int fwnode_mdiobus_register_device(struct mii_bus *bus,
+				   struct fwnode_handle *child, u32 addr)
+{
+	struct mdio_device *mdiodev;
+	int rc;
+
+	mdiodev = mdio_device_create(bus, addr);
+	if (IS_ERR(mdiodev))
+		return PTR_ERR(mdiodev);
+
+	fwnode_handle_get(child);
+	device_set_node(&mdiodev->dev, child);
+
+	/* All data is now stored in the mdiodev struct; register it. */
+	rc = mdio_device_register(mdiodev);
+	if (rc) {
+		device_set_node(&mdiodev->dev, NULL);
+		fwnode_handle_put(child);
+		mdio_device_free(mdiodev);
+		return rc;
+	}
+
+	dev_err(&mdiodev->dev, "registered mdio device %p fwnode at address %i\n",
+		child, addr);
+	return 0;
+}
+EXPORT_SYMBOL(fwnode_mdiobus_register_device);

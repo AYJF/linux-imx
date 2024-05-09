@@ -224,7 +224,6 @@ static int stmmac_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
 	u32 value = MII_BUSY;
 	int data = 0;
 	u32 v;
-	int ret;
 
 	data = pm_runtime_resume_and_get(priv->device);
 	if (data < 0)
@@ -249,10 +248,6 @@ static int stmmac_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
 		}
 	}
 
-	ret = stmmac_bus_clks_config(priv, true);
-	if (ret)
-		return ret;
-
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 			       100, 10000)) {
 		data = -EBUSY;
@@ -270,8 +265,6 @@ static int stmmac_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
 
 	/* Read the data from the MII data register */
 	data = (int)readl(priv->ioaddr + mii_data) & MII_DATA_MASK;
-
-	stmmac_bus_clks_config(priv, false);
 
 err_disable_clks:
 	pm_runtime_put(priv->device);
@@ -324,10 +317,6 @@ static int stmmac_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
 		value |= MII_WRITE;
 	}
 
-	ret = stmmac_bus_clks_config(priv, true);
-	if (ret)
-		return ret;
-
 	/* Wait until any existing MII operation is complete */
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 			       100, 10000)) {
@@ -342,8 +331,6 @@ static int stmmac_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
 	/* Wait until any existing MII operation is complete */
 	ret = readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 				 100, 10000);
-
-	stmmac_bus_clks_config(priv, false);
 
 err_disable_clks:
 	pm_runtime_put(priv->device);
@@ -414,7 +401,6 @@ mdio_gpio_reset_end:
 int stmmac_xpcs_setup(struct mii_bus *bus)
 {
 	struct net_device *ndev = bus->priv;
-	struct mdio_device *mdiodev;
 	struct stmmac_priv *priv;
 	struct dw_xpcs *xpcs;
 	int mode, addr;
@@ -424,15 +410,9 @@ int stmmac_xpcs_setup(struct mii_bus *bus)
 
 	/* Try to probe the XPCS by scanning all addresses. */
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
-		mdiodev = mdio_device_create(bus, addr);
-		if (IS_ERR(mdiodev))
+		xpcs = xpcs_create_mdiodev(bus, addr, mode);
+		if (IS_ERR(xpcs))
 			continue;
-
-		xpcs = xpcs_create(mdiodev, mode);
-		if (IS_ERR_OR_NULL(xpcs)) {
-			mdio_device_free(mdiodev);
-			continue;
-		}
 
 		priv->hw->xpcs = xpcs;
 		break;
@@ -588,10 +568,8 @@ int stmmac_mdio_unregister(struct net_device *ndev)
 	if (!priv->mii)
 		return 0;
 
-	if (priv->hw->xpcs) {
-		mdio_device_free(priv->hw->xpcs->mdiodev);
+	if (priv->hw->xpcs)
 		xpcs_destroy(priv->hw->xpcs);
-	}
 
 	mdiobus_unregister(priv->mii);
 	priv->mii->priv = NULL;

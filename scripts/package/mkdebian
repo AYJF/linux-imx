@@ -199,7 +199,6 @@ cat <<EOF >> debian/control
 
 Package: linux-headers-$version
 Architecture: $debarch
-Provides: linux-headers
 Description: Linux kernel headers for $version on $debarch
  This package provides kernel header files for $version on $debarch
  .
@@ -224,19 +223,10 @@ cat <<EOF > debian/rules
 
 srctree ?= .
 
-build-arm64:
-	\$(MAKE) KERNELRELEASE=${version} ARCH=${ARCH} \
-	KBUILD_BUILD_VERSION=${revision} -f \$(srctree)/Makefile \
-	dtbs modules
-
 build-indep:
 build-arch:
 	\$(MAKE) KERNELRELEASE=${version} ARCH=${ARCH} \
 	KBUILD_BUILD_VERSION=${revision} -f \$(srctree)/Makefile
-
-ifeq ($(ARCH),arm64)
-build-arch: build-arm64
-endif
 
 build: build-arch
 
@@ -246,7 +236,7 @@ binary-arch: build-arch
 	KBUILD_BUILD_VERSION=${revision} -f \$(srctree)/Makefile intdeb-pkg
 
 clean:
-	rm -rf debian/*tmp debian/files
+	rm -rf debian/files debian/linux-*
 	\$(MAKE) clean
 
 binary: binary-arch

@@ -75,12 +75,12 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 	int err;
 	u32 irqf;
 	u32 val;
-	const char * domain;
 
 	/* Apple ARM64 platforms have their own idea of board type, passed in
 	 * via the device tree. They also have an antenna SKU parameter
 	 */
-	if (!of_property_read_string(np, "brcm,board-type", &prop))
+	err = of_property_read_string(np, "brcm,board-type", &prop);
+	if (!err)
 		settings->board_type = prop;
 
 	if (!of_property_read_string(np, "apple,antenna-sku", &prop))
@@ -88,7 +88,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 
 	/* Set board-type to the first string of the machine compatible prop */
 	root = of_find_node_by_path("/");
-	if (root && !settings->board_type) {
+	if (root && err) {
 		char *board_type;
 		const char *tmp;
 
@@ -117,10 +117,6 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 
 	if (bus_type != BRCMF_BUSTYPE_SDIO)
 		return;
-
-	/* Laird - Get regdomain/country code string if it exists */
-	if (of_property_read_string(np, "laird,regdomain", &domain) == 0)
-		strlcpy(settings->regdomain, domain, BRCMF_REGDOMAIN_LEN);
 
 	if (of_property_read_u32(np, "brcm,drive-strength", &val) == 0)
 		sdio->drive_strength = val;

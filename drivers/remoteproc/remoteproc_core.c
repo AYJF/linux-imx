@@ -509,6 +509,12 @@ static int rproc_handle_vdev(struct rproc *rproc, void *ptr,
 	rvdev_data.rsc_offset = offset;
 	rvdev_data.rsc = rsc;
 
+	/*
+	 * When there is more than one remote processor, rproc->nb_vdev number is
+	 * same for each separate instances of "rproc". If rvdev_data.index is used
+	 * as device id, then we get duplication in sysfs, so need to use
+	 * PLATFORM_DEVID_AUTO to auto select device id.
+	 */
 	pdev = platform_device_register_data(dev, "rproc-virtio", PLATFORM_DEVID_AUTO, &rvdev_data,
 					     sizeof(rvdev_data));
 	if (IS_ERR(pdev)) {
@@ -1019,30 +1025,6 @@ static int rproc_handle_resources(struct rproc *rproc,
 	if (!rproc->table_ptr)
 		return 0;
 
-	/*
-	 * Check for rproc->table_ptr->num valid value
-	 *
-	 * When M7 demo different from rpmsg demos is started from U-Boot the
-	 * rsc_table region memory is not populated and then the rproc->table_ptr
-	 * has invalid properties causing kernel hangs
-	 *
-	 * The rpmsg demos initialize the resource table:
-	 *   https://github.com/varigit/freertos-variscite/blob/mcuxpresso_sdk_2.10.x-var01/boards/dart_mx8mp/multicore_examples/rpmsg_lite_pingpong_rtos/linux_remote/main_remote.c#L172
-	 * The other demos don't initialize the resource table due to unused but
-	 * the rproc_handle_resources is always called.
-	 *
-	 * kernel table_ptr type:
-	 *   https://source.codeaurora.org/external/imx/linux-imx/tree/include/linux/remoteproc.h?h=lf-5.10.y#n73
-	 * freertos table_ptr type:
-	 *   https://github.com/varigit/freertos-variscite/blob/mcuxpresso_sdk_2.10.x-var01/boards/som_mx8mp/multicore_examples/rpmsg_lite_pingpong_rtos/linux_remote/rsc_table.h#L29
-	*/
-
-	if ((int)rproc->table_ptr->num < 0) {
-		WARN_ON(rproc->table_ptr->num);
-		rproc->table_ptr->num=0;
-		return 0;
-	}
-
 	for (i = 0; i < rproc->table_ptr->num; i++) {
 		int offset = rproc->table_ptr->offset[i];
 		struct fw_rsc_hdr *hdr = (void *)rproc->table_ptr + offset;
@@ -1302,7 +1284,7 @@ static int rproc_start(struct rproc *rproc, const struct firmware *fw)
 	 * that any subsequent changes will be applied to the loaded version.
 	 */
 	loaded_table = rproc_find_loaded_rsc_table(rproc, fw);
-	if (loaded_table && rproc->cached_table) {
+	if (loaded_table) {
 		memcpy(loaded_table, rproc->cached_table, rproc->table_sz);
 		rproc->table_ptr = loaded_table;
 	}
@@ -1886,10 +1868,16 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	mutex_lock(&rproc->lock);
 
-	if (rproc->state == RPROC_CRASHED || rproc->state == RPROC_OFFLINE) {
+	if (rproc->state == RPROC_CRASHED) {
 		/* handle only the first crash detected */
 		mutex_unlock(&rproc->lock);
 		return;
+	}
+
+	if (rproc->state == RPROC_OFFLINE) {
+		/* Don't recover if the remote processor was stopped */
+		mutex_unlock(&rproc->lock);
+		goto out;
 	}
 
 	rproc->state = RPROC_CRASHED;
@@ -1901,6 +1889,7 @@ static void rproc_crash_handler_work(struct work_struct *work)
 	if (!rproc->recovery_disabled)
 		rproc_trigger_recovery(rproc);
 
+out:
 	pm_relax(rproc->dev.parent);
 }
 

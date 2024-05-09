@@ -32,7 +32,6 @@
 #include "vendor.h"
 #include "bus.h"
 #include "common.h"
-#include "brcm_hw_ids.h"
 
 #define BRCMF_SCAN_IE_LEN_MAX		2048
 
@@ -91,6 +90,9 @@
 
 #define BRCMF_ASSOC_PARAMS_FIXED_SIZE \
 	(sizeof(struct brcmf_assoc_params_le) - sizeof(u16))
+
+#define BRCMF_MAX_CHANSPEC_LIST \
+	(BRCMF_DCMD_MEDLEN / sizeof(__le32) - 1)
 
 static bool check_vif_up(struct brcmf_cfg80211_vif *vif)
 {
@@ -1349,13 +1351,14 @@ static int brcmf_set_pmk(struct brcmf_if *ifp, const u8 *pmk_data, u16 pmk_len)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
 	struct brcmf_wsec_pmk_le pmk;
-	int i, err;
+	int err;
 
-	/* convert to firmware key format */
-	pmk.key_len = cpu_to_le16(pmk_len << 1);
-	pmk.flags = cpu_to_le16(BRCMF_WSEC_PASSPHRASE);
-	for (i = 0; i < pmk_len; i++)
-		snprintf(&pmk.key[2 * i], 3, "%02x", pmk_data[i]);
+	memset(&pmk, 0, sizeof(pmk));
+
+	/* pass pmk directly */
+	pmk.key_len = cpu_to_le16(pmk_len);
+	pmk.flags = cpu_to_le16(0);
+	memcpy(pmk.key, pmk_data, pmk_len);
 
 	/* store psk in firmware */
 	err = brcmf_fil_cmd_data_set(ifp, BRCMF_C_SET_WSEC_PMK,
@@ -5886,6 +5889,11 @@ static s32 brcmf_get_assoc_ies(struct brcmf_cfg80211_info *cfg,
 		(struct brcmf_cfg80211_assoc_ielen_le *)cfg->extra_buf;
 	req_len = le32_to_cpu(assoc_info->req_len);
 	resp_len = le32_to_cpu(assoc_info->resp_len);
+	if (req_len > WL_EXTRA_BUF_MAX || resp_len > WL_EXTRA_BUF_MAX) {
+		bphy_err(drvr, "invalid lengths in assoc info: req %u resp %u\n",
+			 req_len, resp_len);
+		return -EINVAL;
+	}
 	if (req_len) {
 		err = brcmf_fil_iovar_data_get(ifp, "assoc_req_ies",
 					       cfg->extra_buf,
@@ -6203,17 +6211,19 @@ static s32 brcmf_notify_rssi(struct brcmf_if *ifp,
 {
 	struct brcmf_cfg80211_vif *vif = ifp->vif;
 	struct brcmf_rssi_be *info = data;
-	s32 rssi, snr, noise;
+	s32 rssi, snr = 0, noise = 0;
 	s32 low, high, last;
 
-	if (e->datalen < sizeof(*info)) {
+	if (e->datalen >= sizeof(*info)) {
+		rssi = be32_to_cpu(info->rssi);
+		snr = be32_to_cpu(info->snr);
+		noise = be32_to_cpu(info->noise);
+	} else if (e->datalen >= sizeof(rssi)) {
+		rssi = be32_to_cpu(*(__be32 *)data);
+	} else {
 		brcmf_err("insufficient RSSI event data\n");
 		return 0;
 	}
-
-	rssi = be32_to_cpu(info->rssi);
-	snr = be32_to_cpu(info->snr);
-	noise = be32_to_cpu(info->noise);
 
 	low = vif->cqm_rssi_low;
 	high = vif->cqm_rssi_high;
@@ -6557,6 +6567,13 @@ static int brcmf_construct_chaninfo(struct brcmf_cfg80211_info *cfg,
 			band->channels[i].flags = IEEE80211_CHAN_DISABLED;
 
 	total = le32_to_cpu(list->count);
+	if (total > BRCMF_MAX_CHANSPEC_LIST) {
+		bphy_err(drvr, "Invalid count of channel Spec. (%u)\n",
+			 total);
+		err = -EINVAL;
+		goto fail_pbuf;
+	}
+
 	for (i = 0; i < total; i++) {
 		ch.chspec = (u16)le32_to_cpu(list->element[i]);
 		cfg->d11inf.decchspec(&ch);
@@ -6702,6 +6719,13 @@ static int brcmf_enable_bw40_2g(struct brcmf_cfg80211_info *cfg)
 		band = cfg_to_wiphy(cfg)->bands[NL80211_BAND_2GHZ];
 		list = (struct brcmf_chanspec_list *)pbuf;
 		num_chan = le32_to_cpu(list->count);
+		if (num_chan > BRCMF_MAX_CHANSPEC_LIST) {
+			bphy_err(drvr, "Invalid count of channel Spec. (%u)\n",
+				 num_chan);
+			kfree(pbuf);
+			return -EINVAL;
+		}
+
 		for (i = 0; i < num_chan; i++) {
 			ch.chspec = (u16)le32_to_cpu(list->element[i]);
 			cfg->d11inf.decchspec(&ch);
@@ -7633,61 +7657,6 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	vif->wdev.netdev = ndev;
 	ndev->ieee80211_ptr = &vif->wdev;
 	SET_NETDEV_DEV(ndev, wiphy_dev(cfg->wiphy));
-
-	/* Laird - Configure regdomain if provided in settings
-	 *   Required for 4373/43439, optional for 4343/4339
-	 *   Note - Configuration provided as country code except for "ETSI" pseudocode
-	 */
-	if (strlen(drvr->settings->regdomain) != 0) {
-		struct brcmf_fil_country_le ccreq;
-
-		memset(&ccreq, 0, sizeof(ccreq));
-
-		/* Convert ETSI pseudocode to underlying ccode (radio specific) */
-		if (!strcmp("ETSI", drvr->settings->regdomain)) {
-			switch (drvr->bus_if->chip) {
-			case CY_CC_4373_CHIP_ID:
-				strcpy(ccreq.country_abbrev, "DE");
-				break;
-			case BRCM_CC_4339_CHIP_ID:
-			case BRCM_CC_43430_CHIP_ID:
-				strcpy(ccreq.country_abbrev, "EU");
-				break;
-			}
-		} else {
-			memcpy(ccreq.country_abbrev, drvr->settings->regdomain, BRCMF_COUNTRY_BUF_SZ);
-		}
-
-		/* Handle regrev for LWB5 for supported countries */
-		if (drvr->bus_if->chip == BRCM_CC_4339_CHIP_ID) {
-			/* country codes with rev (a country spec) need to also populate ccode parameter */
-			memcpy(ccreq.ccode, ccreq.country_abbrev, BRCMF_COUNTRY_BUF_SZ);
-			if (!strcmp("US", ccreq.ccode))
-				ccreq.rev = cpu_to_le32(911);
-			else if (!strcmp("CA", ccreq.ccode))
-				ccreq.rev = cpu_to_le32(938);
-			else if (!strcmp("EU", ccreq.ccode))
-				ccreq.rev = cpu_to_le32(116);
-			else if (!strcmp("JP", ccreq.ccode))
-				ccreq.rev = cpu_to_le32(101);
-			else {
-				brcmf_err("Regulatory domain %s not supported, aborting!\n", drvr->settings->regdomain);
-				goto wiphy_out;
-			}
-		} else {
-			ccreq.rev = -1;
-		}
-
-		err = brcmf_fil_iovar_data_set(ifp, "country", &ccreq, sizeof(ccreq));
-		if (err) {
-			brcmf_err("Regulatory domain %s not supported, aborting!\n", drvr->settings->regdomain);
-			goto wiphy_out;
-		}
-		brcmf_info("Using regulatory domain %s\n", drvr->settings->regdomain);
-	} else if (drvr->bus_if->chip == CY_CC_4373_CHIP_ID) {
-		brcmf_err("Regulatory domain not configured, aborting!\n");
-		goto wiphy_out;
-	}
 
 	err = wl_init_priv(cfg);
 	if (err) {
