@@ -141,6 +141,33 @@
 	cpu-supply = <&buck2_reg>;
 };
 
+&ddrc {
+	operating-points-v2 = <&ddrc_opp_table>;
+
+	ddrc_opp_table: opp-table {
+		compatible = "operating-points-v2";
+
+		opp-25M {
+			opp-hz = /bits/ 64 <25000000>;
+		};
+
+		opp-100M {
+			opp-hz = /bits/ 64 <100000000>;
+		};
+
+		/*
+		 * On imx8mq B0 PLL can't be bypassed so low bus is 166M
+		 */
+		opp-166M {
+			opp-hz = /bits/ 64 <166935483>;
+		};
+
+		opp-800M {
+			opp-hz = /bits/ 64 <800000000>;
+		};
+	};
+};
+
 &fec1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_fec1>;
@@ -148,44 +175,17 @@
 	fsl,magic-packet;
 	status = "okay";
 
-	mdio {
-		#address-cells = <1>;
-        #size-cells = <0>;
+	assigned-clock-parents = <&clk IMX8MQ_SYS1_PLL_266M>,
+				 <&clk IMX8MQ_SYS2_PLL_100M>,
+				 <&clk IMX8MQ_SYS2_PLL_125M>,
+				 <&clk IMX8MQ_SYS2_PLL_125M>;
 
-		ethernet-switch@0 {
-			compatible = "brcm,bcm53128";
-			reg = <0>;
+	assigned-clock-rates = <0>, <100000000>, <125000000>, <125000000>;
 
-			 ethernet-ports {
-                #address-cells = <1>;
-                #size-cells = <0>;
-
-                port@3 {
-                    reg = <3>;
-                    label = "lan2";
-                };
-
-                port@4 {
-                    reg = <4>;
-                    label = "cable-modem";
-                    phy-mode = "rgmii";
-                    fixed-link {
-                        speed = <1000>;
-                        full-duplex;
-                    };
-                };
-
-                port@5 {
-                    reg = <5>;
-                    phy-mode = "rgmii";
-                    fixed-link {
-                        speed = <1000>;
-                        full-duplex;
-                    };
-                };
-            };
-		};
-	};
+	fixed-link {
+  		speed = <1000>;
+                full-duplex;
+        };		
 };
 
 &ecspi1 {
