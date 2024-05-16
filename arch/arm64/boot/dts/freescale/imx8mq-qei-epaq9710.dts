@@ -2,7 +2,7 @@
 /*
  * Copyright 2017 NXP
  * Copyright (C) 2017-2018 Pengutronix, Lucas Stach <kernel@pengutronix.de>
- * Copyright (C) 2023-2024 Ontash & Ermac
+ * Copyright (C) 2023-2024 QEI
  */
 
 /dts-v1/;
@@ -11,7 +11,7 @@
 
 / {
 	model = "QEI ePAQ-9710 i.MX8MQ";
-	compatible = "fsl,imx8mq-epaq-9710", "fsl,imx8mq";
+	compatible = "fsl,imx8mq-qei-epaq9710", "fsl,imx8mq";
 
 	chosen {
 		stdout-path = &uart1;
