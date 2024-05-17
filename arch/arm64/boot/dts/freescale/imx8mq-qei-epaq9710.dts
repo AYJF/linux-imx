@@ -148,19 +148,20 @@
 	fsl,magic-packet;
 	status = "okay";
 
-	assigned-clock-parents = <&clk IMX8MQ_SYS1_PLL_266M>,
-				 <&clk IMX8MQ_SYS2_PLL_100M>,
-				 <&clk IMX8MQ_SYS2_PLL_125M>,
-				 <&clk IMX8MQ_SYS2_PLL_125M>;
-
-	assigned-clock-rates = <0>, <100000000>, <125000000>, <125000000>;
-
 	fixed-link {
   		speed = <1000>;
                 full-duplex;
 	};
 
-	    mdio {
+	eth0: ethernet@33be0000 {
+		compatible = "brcm,unimac";
+		fixed-link {
+			speed = <1000>;
+			duplex-full;
+		};
+	};
+
+	mdio {
         #address-cells = <1>;
         #size-cells = <0>;
 
@@ -191,7 +192,7 @@
                     reg = <14>;
 					label = "cpu";
                     phy-mode = "rgmii";
-                    ethernet = <&fec1>;
+                    ethernet = <&eth0>;
                     fixed-link {
                         speed = <1000>;
                         full-duplex;
@@ -204,25 +205,6 @@
 
 };
 
-&ecspi1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ecspi1 &pinctrl_ecspi1_cs>;
-	cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
-	status = "okay";
-	spi-cpha;
-	spi-cpol;
-
-	brcm53128: spidev@0 {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		status = "okay";
-		compatible = "linux,spidev";
-		spi-max-frequency = <25000000>;
-		reg = <0>;
-	};
-};
 
 &ecspi2 {
 	#address-cells = <1>;
