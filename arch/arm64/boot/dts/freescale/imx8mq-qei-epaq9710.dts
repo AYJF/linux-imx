@@ -153,14 +153,6 @@
                 full-duplex;
 	};
 
-	eth0: ethernet@33be0000 {
-		compatible = "brcm,unimac";
-		fixed-link {
-			speed = <1000>;
-			duplex-full;
-		};
-	};
-
 	mdio {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -192,7 +184,7 @@
                     reg = <14>;
 					label = "cpu";
                     phy-mode = "rgmii";
-                    ethernet = <&eth0>;
+                    ethernet = <&fec1>;
                     fixed-link {
                         speed = <1000>;
                         full-duplex;
