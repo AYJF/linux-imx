@@ -158,7 +158,50 @@
 	fixed-link {
   		speed = <1000>;
                 full-duplex;
-        };		
+	};
+
+	    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-switch@1e {
+            compatible = "brcm,bcm53128";
+            reg = <30>;
+
+            ethernet-ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@3 {
+                    reg = <3>;
+                    label = "lan1";
+                };
+
+                port@4 {
+                    reg = <4>;
+                    label = "lan2";
+                };
+
+                port@5 {
+                    reg = <5>;
+                    label = "lan3";
+                };
+
+                port@14 {
+                    reg = <14>;
+					label = "cpu";
+                    phy-mode = "rgmii";
+                    ethernet = <&fec1>;
+                    fixed-link {
+                        speed = <1000>;
+                        full-duplex;
+                    };
+                };
+            };
+        };
+    };
+
+
 };
 
 &ecspi1 {
