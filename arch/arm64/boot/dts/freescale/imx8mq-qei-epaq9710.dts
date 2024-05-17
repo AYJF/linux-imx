@@ -166,10 +166,10 @@
         #size-cells = <0>;
 
         ethernet-switch@1e {
-            compatible = "brcm,bcm53128";
+            compatible = "brcm,bcm53162";
             reg = <30>;
 
-            ethernet-ports {
+            ports {
                 #address-cells = <1>;
                 #size-cells = <0>;
 
@@ -201,8 +201,6 @@
             };
         };
     };
-
-
 };
 
 
