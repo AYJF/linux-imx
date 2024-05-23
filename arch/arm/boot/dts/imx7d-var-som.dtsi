@@ -584,7 +584,6 @@
 		};
 		pinctrl_usbotg2_pwr_2: usbotg2-2 {
 			fsl,pins = <
-				MX7D_PAD_GPIO1_IO07__GPIO1_IO7		0x14
 			>;
 		};
 
