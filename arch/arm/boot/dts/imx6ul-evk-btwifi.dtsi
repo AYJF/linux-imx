@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 Freescale Semiconductor, Inc.
- * Copyright 2019 NXP
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -14,19 +13,31 @@
  */
 
 / {
-	usdhc1_pwrseq: usdhc1_pwrseq {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wifi>;
-		compatible = "mmc-pwrseq-simple";
-		reset-gpios = <&gpio5 1 GPIO_ACTIVE_LOW>;
+	regulators {
+		wlreg_on: fixedregulator@100 {
+			compatible = "regulator-fixed";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			regulator-name = "wlreg_on";
+			gpio = <&gpio5 1 0>;
+			startup-delay-us = <100>;
+			enable-active-high;
+		};
+	};
+
+	bcmdhd_wlan_0: bcmdhd_wlan@0 {
+		compatible = "android,bcmdhd_wlan";
+		wlreg_on-supply = <&wlreg_on>;
 	};
 };
 
 &iomuxc {
-	pinctrl_wifi: wifigrp {
-		fsl,pins = <
-			MX6UL_PAD_SNVS_TAMPER1__GPIO5_IO01 0x03029
-		>;
+	imx6ul-evk-murata-v2 {
+		pinctrl_wifi: wifigrp {
+			fsl,pins = <
+				MX6UL_PAD_SNVS_TAMPER1__GPIO5_IO01 0x03029
+			>;
+		};
 	};
 };
 
@@ -35,19 +46,11 @@
 };
 
 &usdhc1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usdhc1>;
+	pinctrl-0 = <&pinctrl_usdhc1 &pinctrl_wifi>;
 	no-1-8-v;
 	non-removable;
-	mmc-pwrseq = <&usdhc1_pwrseq>;
-	/delete-property/ enable-sdio-wakeup;
-};
-
-&gpio_spi {
-	/* Murata: modify default setting so that BT_nPWD/BT_REG_ON
-	 * is low (0V) during kernel boot.
-	 */
-	registers-default = /bits/ 8 <0x47>;
+	cd-post;
+	pm-ignore-notify;
+	wifi-host; /* add hook for SD card detect mechanism for BCMDHD driver */
 };

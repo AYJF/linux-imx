@@ -1,15 +1,50 @@
-// SPDX-License-Identifier: GPL-2.0+ OR MIT
-//
-// Copyright 2016 Freescale Semiconductor, Inc.
+/*
+ * Copyright (C) 2015 Freescale Semiconductor, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 
-/dts-v1/;
-
+#include "imx6q-sabreauto.dts"
 #include "imx6qp.dtsi"
-#include "imx6qdl-sabreauto.dtsi"
 
 / {
 	model = "Freescale i.MX6 Quad Plus SABRE Automotive Board";
-	compatible = "fsl,imx6qp-sabreauto", "fsl,imx6qp";
+};
+
+&mxcfb1 {
+	prefetch;
+};
+
+&mxcfb2 {
+	prefetch;
+};
+
+&mxcfb3 {
+	prefetch;
+};
+
+&mxcfb4 {
+	prefetch;
+};
+
+&fec {
+	pinctrl-assert-gpios = <&max7322 0 GPIO_ACTIVE_HIGH>;
+};
+
+&i2c2 {
+	max7322: gpio@68 {
+		compatible = "maxim,max7322";
+		reg = <0x68>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
+
+&pcie {
+	reset-gpio = <&max7310_c 5 GPIO_ACTIVE_LOW>;
+	status = "okay";
 };
 
 &pre1 {
@@ -38,47 +73,7 @@
 	status = "okay";
 };
 
-&mxcfb1 {
-	prefetch;
-	status = "okay";
-};
-
-&mxcfb2 {
-	prefetch;
-	status = "okay";
-};
-
-&mxcfb3 {
-	prefetch;
-	status = "okay";
-};
-
-&mxcfb4 {
-	prefetch;
-	status = "okay";
-};
-
-&ldb {
-	lvds-channel@0 {
-		crtc = "ipu2-di0";
-	};
-
-	lvds-channel@1 {
-		crtc = "ipu2-di1";
-	};
-};
-
-&i2c2 {
-	max7322: gpio@68 {
-		compatible = "maxim,max7322";
-		reg = <0x68>;
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-};
-
-&pcie {
-	reset-gpio = <&max7310_c 5 GPIO_ACTIVE_LOW>;
+&reg_sd3_vmmc {
 	status = "okay";
 };
 
@@ -86,6 +81,11 @@
 	status = "okay";
 };
 
+&usdhc3 {
+	vmmc-supply = <&reg_sd3_vmmc>;
+};
+
 &vgen3_reg {
 	regulator-always-on;
 };
+
