@@ -11,6 +11,7 @@
  * <mux_reg conf_reg input_reg mux_mode input_val>
  */
 
+#define MX7D_PAD_LPSR_GPIO1_IO00__GPIO1_IO0                       0x0000 0x0030 0x0000 0x0 0x0
 #define MX7D_PAD_LPSR_GPIO1_IO00__PWM4_OUT                        0x0000 0x0030 0x0000 0x1 0x0
 #define MX7D_PAD_LPSR_GPIO1_IO00__WDOG1_WDOG_ANY                  0x0000 0x0030 0x0000 0x2 0x0
 #define MX7D_PAD_LPSR_GPIO1_IO00__WDOG1_WDOG_B                    0x0000 0x0030 0x0000 0x3 0x0
