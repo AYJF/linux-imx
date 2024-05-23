@@ -9,6 +9,7 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/reset/imx7-reset.h>
+#include "imx7d-pinfunc-lpsr.h"
 #include "imx7d-pinfunc.h"
 
 / {
