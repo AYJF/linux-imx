@@ -582,18 +582,4 @@
 		fsl,pins = <
 		>;
 	};
-
-	pinctrl_wlan: wlangrp {
-		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO04__GPIO1_IO4		0x09 /* WL_REG_ON */
-			MX7D_PAD_LPSR_GPIO1_IO03__OSC32K_32K_OUT	0xb0 /* WIFI Slow clock */
-		>;
-	};
-
-	pinctrl_wlan_sleep: wlangrp_sleep {
-		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO04__GPIO1_IO4		0x10 /* WL_REG_ON */
-			MX7D_PAD_LPSR_GPIO1_IO03__OSC32K_32K_OUT	0x10 /* WIFI Slow clock */
-		>;
-	};
 };
