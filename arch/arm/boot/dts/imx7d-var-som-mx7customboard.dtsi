@@ -52,7 +52,6 @@
 
 	reg_usb_otg1_vbus: reg-usb-otg1-vbus {
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_usbotg1_pwr>;
 		compatible = "regulator-fixed";
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
@@ -250,9 +249,7 @@
 };
 
 &pwm2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_pwm2>;
-	status = "okay";
+	status = "disabled";
 };
 
 /* DEBUG */
@@ -577,27 +574,26 @@
 };
 
 &iomuxc_lpsr {
-	pinctrl_pwm2: pwm2grp {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog_2 &pinctrl_usbotg2_pwr_2>;
+
+
+	pinctrl_hog_2: hoggrp-2 {
 		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO02__PWM2_OUT		0x110b0
+			MX7D_PAD_GPIO1_IO00__GPIO1_IO0		0x59 /* Heartbeat LED - Output - MicroPAQ 940P  */
+			MX7D_PAD_GPIO1_IO02__GPIO1_IO2      0x59 /* RELAY_ON - Output - MicroPAQ 940P */
+			MX7D_PAD_GPIO1_IO05__GPIO1_IO5		0x59 /* HMI Power On - Output - MicroPAQ 940P */
+		>;
+	};
+	pinctrl_usbotg2_pwr_2: usbotg2-2 {
+		fsl,pins = <
+			MX7D_PAD_GPIO1_IO07__GPIO1_IO7		0x14
 		>;
 	};
 
-	pinctrl_usbotg1_pwr: usbotg1pwrgrp {
+	pinctrl_sai1_mclk: sai1grp_mclk {
 		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO05__GPIO1_IO5		0x14
-		>;
-	};
-
-	pinctrl_usbotg2_pwr: usbotg2pwrgrp {
-		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO07__GPIO1_IO7		0x14
-		>;
-	};
-
-	pinctrl_wdog: wdoggrp {
-		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO00__WDOG1_WDOG_B		0x74
+			MX7D_PAD_GPIO1_IO01__SAI1_MCLK		0x1f
 		>;
 	};
 };
