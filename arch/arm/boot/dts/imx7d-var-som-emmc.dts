@@ -9,5 +9,7 @@
 #include "imx7d-var-som-mx7customboard.dtsi"
 
 / {
-	model = "Variscite VAR-SOM-MX7 with eMMC on VAR-MX7CustomBoard";
+	model = "QEI Inc. MicroPAQ 940P 06/22/2024";
+	compatible = "fsl,imx7d-var-som", "fsl,imx7d";
 };
+
