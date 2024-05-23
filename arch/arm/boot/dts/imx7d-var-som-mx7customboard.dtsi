@@ -274,6 +274,44 @@
 	status = "okay";
 };
 
+&uart3 {
+	status = "disabled";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	assigned-clocks = <&clks IMX7D_UART4_ROOT_SRC>;
+	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+	status = "okay";
+};
+
+&uart5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart5>;
+	assigned-clocks = <&clks IMX7D_UART5_ROOT_SRC>;
+	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+	status = "disabled";
+};
+
+&uart6 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart6>;
+	assigned-clocks = <&clks IMX7D_UART6_ROOT_SRC>;
+	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+	fsl,uart-has-rtscts;
+	status = "okay";
+};
+
+&uart7 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart7>;
+	assigned-clocks = <&clks IMX7D_UART7_ROOT_SRC>;
+	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+	fsl,uart-has-rtscts;
+	status = "okay";
+};
+
 &usbh {
 	status = "okay";
 	vbus-supply = <&reg_hsic_hub_pwr_on>;
@@ -282,7 +320,7 @@
 &usbotg1 {
 	vbus-supply = <&reg_usb_otg1_vbus>;
 	dr_mode = "host";
-	status = "okay";
+	status = "disabled";
 };
 
 &usbotg2 {
@@ -431,6 +469,7 @@
 		>;
 	};
 
+	/* MAINT PORT-1 */
 	pinctrl_uart1: uart1grp {
 		fsl,pins = <
 			MX7D_PAD_UART1_TX_DATA__UART1_DCE_TX	0x79
@@ -445,6 +484,7 @@
 		>;
 	};
 
+	/* EXP Port-4 */
 	pinctrl_uart2: uart2grp {
 		fsl,pins = <
 			MX7D_PAD_LCD_ENABLE__UART2_DCE_TX	0x79
@@ -453,6 +493,41 @@
 			MX7D_PAD_LCD_HSYNC__UART2_DCE_RTS	0x79
 		>;
 	};
+
+	/* SPARE SERIAL PORT1 - SP-1 */		
+	pinctrl_uart4: uart4grp {
+		fsl,pins = <
+			MX7D_PAD_I2C2_SDA__UART4_DCE_TX			0x79
+			MX7D_PAD_SAI2_TX_SYNC__UART4_DCE_RX		0x79
+		>;
+	};
+
+	/* SPARE SERIAL PORT2- SP-2 */
+	pinctrl_uart5: uart5grp {
+		fsl,pins = <
+			MX7D_PAD_I2C4_SCL__UART5_DCE_RX			0x79
+		>;
+	};
+
+	/* RS-485 PORT */		
+	pinctrl_uart6: uart6grp {
+		fsl,pins = <
+			MX7D_PAD_EPDC_DATA09__UART6_DCE_TX		0x79
+			MX7D_PAD_EPDC_DATA08__UART6_DCE_RX		0x79
+			MX7D_PAD_EPDC_DATA11__UART6_DCE_CTS     0x79 
+			MX7D_PAD_EPDC_DATA10__UART6_DCE_RTS     0x79 
+		>;
+	};
+
+	/* COMBO - 485/232 PORT */					
+	pinctrl_uart7: uart7grp {
+		fsl,pins = <
+			MX7D_PAD_EPDC_DATA13__UART7_DCE_TX		0x79
+			MX7D_PAD_EPDC_DATA12__UART7_DCE_RX		0x79
+			MX7D_PAD_EPDC_DATA15__UART7_DCE_CTS		0x79 
+			MX7D_PAD_EPDC_DATA14__UART7_DCE_RTS		0x79	
+		>;
+	};	
 
 	pinctrl_touch: touchgrp {
 		fsl,pins = <

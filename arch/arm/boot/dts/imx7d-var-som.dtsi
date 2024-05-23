@@ -204,9 +204,6 @@
 	clock-frequency = <100000>;
 	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&pinctrl_i2c1>;
-	pinctrl-1 = <&pinctrl_i2c1_gpio>;
-	scl-gpios = <&gpio4 8 GPIO_ACTIVE_HIGH>;
-	sda-gpios = <&gpio4 9 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 
 	pmic: pfuze3000@8 {
@@ -304,23 +301,7 @@
 };
 
 &i2c2 {
-	clock-frequency = <100000>;
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&pinctrl_i2c2>;
-	pinctrl-1 = <&pinctrl_i2c2_gpio>;
-	scl-gpios = <&gpio4 10 GPIO_ACTIVE_HIGH>;
-	sda-gpios = <&gpio4 11 GPIO_ACTIVE_HIGH>;
-	status = "okay";
-
-	wm8731: wm8731@1a {
-		#sound-dai-cells = <0>;
-		AVDD-supply = <&vgen6_reg>;
-		compatible = "wlf,wm8731";
-		reg = <0x1a>;
-		clocks = <&clks IMX7D_AUDIO_MCLK_ROOT_DIV>;
-		clock-names = "mclk";
-		status = "okay";
-	};
+	status = "disabled";
 };
 
 &reg_1p0d {
@@ -349,48 +330,59 @@
 
 /* BT */
 &uart3 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_uart3>, <&pinctrl_bt>;
-	assigned-clocks = <&clks IMX7D_UART3_ROOT_SRC>;
-	assigned-clock-parents = <&clks IMX7D_PLL_SYS_MAIN_240M_CLK>;
-	uart-has-rtscts;
-	status = "okay";
+	status = "disabled";
 };
 
 /* WiFi */
 &usdhc2 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	pinctrl-names = "default", "state_100mhz", "state_200mhz","sleep";
-	pinctrl-0 = <&pinctrl_usdhc2>, <&pinctrl_wlan>;
-	pinctrl-1 = <&pinctrl_usdhc2_100mhz>, <&pinctrl_wlan>;
-	pinctrl-2 = <&pinctrl_usdhc2_200mhz>, <&pinctrl_wlan>;
-	pinctrl-3 = <&pinctrl_usdhc2_sleep>, <&pinctrl_wlan_sleep>;
-	keep-power-in-suspend;
-	non-removable;
-	pm-ignore-notify;
-	vmmc-supply = <&wlreg_on>;
-	status = "okay";
-
-	brcmf: bcrmf@1 {
-		reg = <1>;
-		compatible = "brcm,bcm4329-fmac";
-	};
+	status = "disabled";
 };
 
 &iomuxc {
-	pinctrl_bt: btgrp {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog_1>;
+
+	pinctrl_hog_1: hoggrp-1 {
 		fsl,pins = <
-			MX7D_PAD_GPIO1_IO14__GPIO1_IO14		0x80000000  /* bt reg on */
+			MX7D_PAD_GPIO1_IO10__GPIO1_IO10		0x79  /* Dip 1 - input - MicroPAQ 940P */
+			MX7D_PAD_GPIO1_IO11__GPIO1_IO11		0x79  /* Dip 2 - input - MicroPAQ 940P */				
+			MX7D_PAD_GPIO1_IO12__GPIO1_IO12		0x79  /* Dip 3 - input - MicroPAQ 940P */	
+			MX7D_PAD_GPIO1_IO13__GPIO1_IO13     0x59  /* WDOG  - output - MicroPAQ 940P */	
+			MX7D_PAD_LCD_DATA20__GPIO3_IO25		0x59  /* STATUS 1 - input - MicroPAQ 940P */		
+			MX7D_PAD_LCD_DATA21__GPIO3_IO26		0x59  /* STATUS 2 - input - MicroPAQ 940P */
+			MX7D_PAD_LCD_DATA22__GPIO3_IO27		0x59  /* STATUS 3 - input - MicroPAQ 940P */
+			MX7D_PAD_LCD_DATA23__GPIO3_IO28		0x59  /* STATUS 4 - input - MicroPAQ 940P */
+			MX7D_PAD_I2C2_SCL__GPIO4_IO10		0x59  /* STATUS 5 - input - MicroPAQ 940P */
+			MX7D_PAD_I2C3_SDA__GPIO4_IO13		0x59  /* STATUS 6 - input - MicroPAQ 940P */
+			MX7D_PAD_I2C4_SDA__GPIO4_IO15		0x59  /* STATUS 7 - input - MicroPAQ 940P */
+			MX7D_PAD_SAI1_RX_BCLK__GPIO6_IO17	0x59  /* STATUS 8 - input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA00__GPIO2_IO0     0x59  /* 24V SENSE RELAY - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA01__GPIO2_IO1     0x59  /* LOCAL/REMOTE - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_BDR0__GPIO2_IO28      0x59  /* RELAY SENSE1 - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_BDR1__GPIO2_IO29      0x59  /* RELAY SENSE2 - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_PWR_COM__GPIO2_IO30   0x59  /* RELAY SENSE3 - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_PWR_STAT__GPIO2_IO31  0x59  /* RELAY SENSE4 - Input - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA04__GPIO2_IO4     0x09  /* RELAY1 - Output - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA05__GPIO2_IO5     0x09  /* RELAY2 - Output - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA06__GPIO2_IO6     0x09  /* RELAY3 - Output - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA07__GPIO2_IO7     0x09  /* RELAY4 - Output - MicroPAQ 940P */
+			MX7D_PAD_SD1_WP__GPIO5_IO1          0x59  /* RELAY_PWR - Output - MicroPAQ 940P */
+			MX7D_PAD_SAI1_RX_SYNC__GPIO6_IO16   0x59  /* COMBO RS485_SEL - Output - MicroPAQ 940P */
+			MX7D_PAD_EPDC_DATA03__GPIO2_IO3     0x59
+/*			MX7D_PAD_EPDC_DATA11__GPIO2_IO11    0x59 */ /* RS485_CTS - Output - MicroPAQ 940P */  
+/*			MX7D_PAD_EPDC_DATA15__GPIO2_IO15    0x59 */ /* COMBO RS485_CTS - Output - MicroPAQ 940P */ 
+/*			MX7D_PAD_EPDC_DATA14__GPIO2_IO14    0x59 */ /* COMBO RS485_RTS - Output - MicroPAQ 940P */ 
 		>;
 	};
 
+	
+    /* ADC */
 	pinctrl_ecspi1: ecspi1grp {
 		fsl,pins = <
-			MX7D_PAD_ECSPI1_MISO__ECSPI1_MISO	0x2
-			MX7D_PAD_ECSPI1_MOSI__ECSPI1_MOSI	0x2
-			MX7D_PAD_ECSPI1_SCLK__ECSPI1_SCLK	0x2
-			MX7D_PAD_ECSPI1_SS0__GPIO4_IO19		0x2
+			MX7D_PAD_UART3_RTS_B__ECSPI1_SCLK			0x2
+			MX7D_PAD_UART3_CTS_B__GPIO4_IO7				0x2
+			MX7D_PAD_UART3_RX_DATA__ECSPI1_MISO			0x2
+			MX7D_PAD_UART3_TX_DATA__ECSPI1_MOSI			0x2
 		>;
 	};
 
@@ -506,24 +498,10 @@
 		>;
 	};
 
-	pinctrl_i2c1_gpio: i2c1gpiogrp {
-		fsl,pins = <
-			MX7D_PAD_I2C1_SDA__GPIO4_IO9	0x4000007f
-			MX7D_PAD_I2C1_SCL__GPIO4_IO8	0x4000007f
-		>;
-	};
-
 	pinctrl_i2c2: i2c2grp {
 		fsl,pins = <
 			MX7D_PAD_I2C2_SDA__I2C2_SDA	0x4000007f
 			MX7D_PAD_I2C2_SCL__I2C2_SCL	0x4000007f
-		>;
-	};
-
-	pinctrl_i2c2_gpio: i2c2gpiogrp {
-		fsl,pins = <
-			MX7D_PAD_I2C2_SDA__GPIO4_IO11	0x4000007f
-			MX7D_PAD_I2C2_SCL__GPIO4_IO10	0x4000007f
 		>;
 	};
 
@@ -562,12 +540,12 @@
 
 	pinctrl_usdhc2_sleep: usdhc2grp_sleep {
 		fsl,pins = <
-			MX7D_PAD_SD2_CMD__GPIO5_IO13		0x10
-			MX7D_PAD_SD2_CLK__GPIO5_IO12		0x10
-			MX7D_PAD_SD2_DATA0__GPIO5_IO14		0x10
-			MX7D_PAD_SD2_DATA1__GPIO5_IO15		0x10
-			MX7D_PAD_SD2_DATA2__GPIO5_IO16		0x10
-			MX7D_PAD_SD2_DATA3__GPIO5_IO17		0x10
+			MX7D_PAD_SD2_CMD__GPIO5_IO13		0x14
+			MX7D_PAD_SD2_CLK__GPIO5_IO12		0x14
+			MX7D_PAD_SD2_DATA0__GPIO5_IO14		0x14
+			MX7D_PAD_SD2_DATA1__GPIO5_IO15		0x14
+			MX7D_PAD_SD2_DATA2__GPIO5_IO16		0x14
+			MX7D_PAD_SD2_DATA3__GPIO5_IO17		0x14
 		>;
 	};
 
@@ -606,9 +584,25 @@
 };
 
 &iomuxc_lpsr {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog_2 &pinctrl_usbotg2_pwr_2>;
+
+	pinctrl_hog_2: hoggrp-2 {
+		fsl,pins = <
+			MX7D_PAD_GPIO1_IO00__GPIO1_IO0		0x59 /* Heartbeat LED - Output - MicroPAQ 940P  */
+			MX7D_PAD_GPIO1_IO02__GPIO1_IO2      0x59 /* RELAY_ON - Output - MicroPAQ 940P */
+			MX7D_PAD_GPIO1_IO05__GPIO1_IO5		0x59 /* HMI Power On - Output - MicroPAQ 940P */
+		>;
+	};
+	pinctrl_usbotg2_pwr_2: usbotg2-2 {
+		fsl,pins = <
+			MX7D_PAD_GPIO1_IO07__GPIO1_IO7		0x14
+		>;
+	};
+	
 	pinctrl_sai1_mclk: sai1grp_mclk {
 		fsl,pins = <
-			MX7D_PAD_LPSR_GPIO1_IO01__SAI1_MCLK		0x1f
+			MX7D_PAD_GPIO1_IO01__SAI1_MCLK		0x1f
 		>;
 	};
 
