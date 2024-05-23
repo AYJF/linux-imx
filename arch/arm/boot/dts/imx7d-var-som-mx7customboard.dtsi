@@ -62,7 +62,6 @@
 
 	reg_usb_otg2_vbus: reg-usb-otg2-vbus {
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_usbotg2_pwr>;
 		compatible = "regulator-fixed";
 		regulator-name = "usb_otg2_vbus";
 		regulator-min-microvolt = <5000000>;
