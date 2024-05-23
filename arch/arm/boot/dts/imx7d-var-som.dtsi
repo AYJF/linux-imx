@@ -61,10 +61,6 @@
 	assigned-clock-rates = <884736000>;
 };
 
-&wdog1 {
-	status = "disabled";
-};
-
 &ecspi1 {
 	fsl,spi-num-chipselects = <1>;
 	pinctrl-names = "default";
