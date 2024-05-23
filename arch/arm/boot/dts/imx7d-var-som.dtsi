@@ -572,3 +572,45 @@
 		};
 	};
 };
+
+
+&iomuxc_lpsr {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog_2 &pinctrl_usbotg2_pwr_2>;
+
+	imx7d-sdb {
+		pinctrl_hog_2: hoggrp-2 {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO00__GPIO1_IO0		0x59 /* Heartbeat LED - Output - MicroPAQ 940P  */
+				MX7D_PAD_GPIO1_IO02__GPIO1_IO2      0x59 /* RELAY_ON - Output - MicroPAQ 940P */
+				MX7D_PAD_GPIO1_IO05__GPIO1_IO5		0x59 /* HMI Power On - Output - MicroPAQ 940P */
+			>;
+		};
+		pinctrl_usbotg2_pwr_2: usbotg2-2 {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO07__GPIO1_IO7		0x14
+			>;
+		};
+
+		pinctrl_sai1_mclk: sai1grp_mclk {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO01__SAI1_MCLK		0x1f
+			>;
+		};
+/*
+		pinctrl_wlan: wlangrp {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO04__GPIO1_IO4		0x59 WL_REG_ON 
+				MX7D_PAD_GPIO1_IO03__OSC32K_32K_OUT	0xb0 WIFI Slow clock
+			>;
+		};
+
+		pinctrl_wlan_sleep: wlangrp_sleep {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO04__GPIO1_IO4		0x14 
+				MX7D_PAD_GPIO1_IO03__OSC32K_32K_OUT	0x14 
+			>;
+		};
+*/		
+	};
+};

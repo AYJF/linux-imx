@@ -295,10 +295,6 @@
 	status = "disabled";
 }
 
-&wdog1 {
-	status = "disabled";
-};
-
 &snvs_rtc {
 	status = "disabled";
 };
