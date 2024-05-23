@@ -1,31 +1,15 @@
 /*
- * Copyright (C) 2016 Variscite, Ltd. All Rights Reserved
+ * Copyright (C) 2015-2023 Variscite Ltd.
  *
- * Copyright 2012 Freescale Semiconductor, Inc.
- * Copyright 2011 Linaro Ltd.
- *
- * The code contained herein is licensed under the GNU General Public
- * License. You may obtain a copy of the GNU General Public License
- * Version 2 or later at the following locations:
- *
- * http://www.opensource.org/licenses/gpl-license.html
- * http://www.gnu.org/copyleft/gpl.html
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Capacitive Display for VAR-MX6CustomBoard
  */
 
-&mxcfb1 {
-	interface_pix_fmt = "RGB24";
-};
-
-&i2c3 {
-	/* Touch */
-	ctw6120_tsc@38 {
-		compatible = "edt,edt-ft5206";
-		reg = <0x38>;
-		interrupt-parent = <&gpio3>;
-		interrupts = <7 0>;
-	};
+&cap_touch {
+	status = "okay";
 };
 
 &ldb {
@@ -73,4 +57,8 @@
 			};
 		};
 	};
+};
+
+&mxcfb1 {
+	interface_pix_fmt = "RGB24";
 };

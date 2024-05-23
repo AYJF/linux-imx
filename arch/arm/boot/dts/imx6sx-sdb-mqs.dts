@@ -1,22 +1,20 @@
-/*
- * Copyright (C) 2014-2015 Freescale Semiconductor, Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This feature is supported by the MX6SX-SD-EXP1 board
- *
- */
+// SPDX-License-Identifier: GPL-2.0
+//
+// Copyright (C) 2014 Freescale Semiconductor, Inc.
 
 #include "imx6sx-sdb.dts"
 / {
+
+	sound {
+		status = "disabled";
+	};
+
 	sound-mqs {
 		compatible = "fsl,imx6sx-sdb-mqs",
-				"fsl,imx-audio-mqs";
+			     "fsl,imx-audio-mqs";
 		model = "mqs-audio";
-		cpu-dai = <&sai1>;
-		asrc-controller = <&asrc>;
+		audio-cpu = <&sai1>;
+		audio-asrc = <&asrc>;
 		audio-codec = <&mqs>;
 	};
 };
@@ -37,6 +35,10 @@
 &sai1 {
 	pinctrl-0 = <>;
 	status = "okay";
+};
+
+&ssi2 {
+	status = "disabled";
 };
 
 &sdma {

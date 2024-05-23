@@ -1,45 +1,15 @@
 /*
- * Copyright (C) 2016 Variscite, Ltd. All Rights Reserved
+ * Copyright (C) 2015-2023 Variscite Ltd.
  *
- * Copyright 2012 Freescale Semiconductor, Inc.
- * Copyright 2011 Linaro Ltd.
- *
- * The code contained herein is licensed under the GNU General Public
- * License. You may obtain a copy of the GNU General Public License
- * Version 2 or later at the following locations:
- *
- * http://www.opensource.org/licenses/gpl-license.html
- * http://www.gnu.org/copyleft/gpl.html
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  * Resistive Display for VAR-MX6CustomBoard
  */
 
-&mxcfb1 {
-	interface_pix_fmt = "RGB24";
-};
-
-&ecspi3 {
-	/* Touch */
-	ads7846@0 {
-		reg = <0>;	/* CS0 */
-		compatible = "ti,ads7846";
-		interrupt-parent = <&gpio4>;
-		interrupts = <25 0>;
-		spi-max-frequency = <1500000>;
-		pendown-gpio = <&gpio4 25 0>;
-		ti,x-min = /bits/ 16 <125>;
-		ti,x-max = /bits/ 16 <4008>;
-		ti,y-min = /bits/ 16 <282>;
-		ti,y-max = /bits/ 16 <3864>;
-		ti,x-plate-ohms = /bits/ 16 <180>;
-		ti,pressure-max = /bits/ 16 <255>;
-		ti,debounce-max = /bits/ 16 <10>;
-		ti,debounce-tol = /bits/ 16 <3>;
-		ti,debounce-rep = /bits/ 16 <1>;
-		ti,settle-delay-usec = /bits/ 16 <150>;
-		ti,keep-vref-on;
-		linux,wakeup;
-	};
+&res_touch {
+	status = "okay";
 };
 
 &ldb {
@@ -87,4 +57,8 @@
 			};
 		};
 	};
+};
+
+&mxcfb1 {
+	interface_pix_fmt = "RGB24";
 };

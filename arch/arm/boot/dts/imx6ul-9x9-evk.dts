@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2015 Freescale Semiconductor, Inc.
+ * Copyright 2017 NXP
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -39,7 +40,7 @@
 		linux,cma {
 			compatible = "shared-dma-pool";
 			reusable;
-			size = <0x6000000>;
+			size = <0xa000000>;
 			linux,cma-default;
 		};
 	};
@@ -81,6 +82,7 @@
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
 			gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+			off-on-delay-us = <20000>;
 			enable-active-high;
 		};
 	};
@@ -89,36 +91,23 @@
 		compatible = "fsl,imx6ul-evk-wm8960",
 			   "fsl,imx-audio-wm8960";
 		model = "wm8960-audio";
-		cpu-dai = <&sai2>;
+		audio-cpu = <&sai2>;
 		audio-codec = <&codec>;
-		asrc-controller = <&asrc>;
-		codec-master;
-		gpr = <&gpr>;
-		/*
-                 * hp-det = <hp-det-pin hp-det-polarity>;
-		 * hp-det-pin: JD1 JD2  or JD3
-		 * hp-det-polarity = 0: hp detect high for headphone
-		 * hp-det-polarity = 1: hp detect high for speaker
-		 */
-		hp-det = <3 0>;
-		hp-det-gpios = <&gpio5 4 0>;
+		audio-asrc = <&asrc>;
+		hp-det-gpio = <&gpio5 4 0>;
 		audio-routing =
-			"Headset Jack", "HP_L",
-			"Headset Jack", "HP_R",
+			"Headphone Jack", "HP_L",
+			"Headphone Jack", "HP_R",
 			"Ext Spk", "SPK_LP",
 			"Ext Spk", "SPK_LN",
 			"Ext Spk", "SPK_RP",
 			"Ext Spk", "SPK_RN",
-			"LINPUT2", "Hp MIC",
-			"LINPUT3", "Hp MIC",
-			"RINPUT1", "Main MIC",
-			"RINPUT2", "Main MIC",
-			"Hp MIC", "MICB",
-			"Main MIC", "MICB",
-			"CPU-Playback", "ASRC-Playback",
-			"Playback", "CPU-Playback",
-			"ASRC-Capture", "CPU-Capture",
-			"CPU-Capture", "Capture";
+			"LINPUT2", "Mic Jack",
+			"LINPUT3", "Mic Jack",
+			"RINPUT1", "AMIC",
+			"RINPUT2", "AMIC",
+			"Mic Jack", "MICB",
+			"AMIC", "MICB";
 	};
 
 	spi4 {
@@ -170,9 +159,17 @@
 		396000	1175000
 		198000	1175000
 	>;
-	arm-supply = <&sw1c_reg>;
-	soc-supply = <&sw1c_reg>;
 	fsl,arm-soc-shared = <1>;
+};
+
+&reg_arm {
+	vin-supply = <&sw1c_reg>;
+	regulator-allow-bypass;
+};
+
+&reg_soc {
+	vin-supply = <&sw1c_reg>;
+	regulator-allow-bypass;
 };
 
 &csi {
@@ -216,14 +213,14 @@
 	};
 };
 
-&flexcan1 {
+&can1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexcan1>;
 	xceiver-supply = <&reg_can_3v3>;
 	status = "okay";
 };
 
-&flexcan2 {
+&can2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexcan2>;
 	xceiver-supply = <&reg_can_3v3>;
@@ -231,11 +228,10 @@
 };
 
 &gpc {
-	fsl,cpu_pupscr_sw2iso = <0x1>;
+	fsl,cpu_pupscr_sw2iso = <0xf>;
 	fsl,cpu_pupscr_sw = <0x0>;
 	fsl,cpu_pdnscr_iso2sw = <0x1>;
 	fsl,cpu_pdnscr_iso = <0x1>;
-	fsl,wdog-reset = <1>; /* watchdog select of reset source */
 	fsl,ldo-bypass = <1>;
 };
 
@@ -245,7 +241,7 @@
 	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
 
-	pmic: pfuze3000@08 {
+	pmic: pfuze3000@8 {
 		compatible = "fsl,pfuze3000";
 		reg = <0x08>;
 
@@ -336,7 +332,7 @@
 		};
 	};
 
-	mag3110@0e {
+	mag3110@e {
 		compatible = "fsl,mag3110";
 		reg = <0x0e>;
 		position = <2>;
@@ -363,6 +359,8 @@
 		clocks = <&clks IMX6UL_CLK_SAI2>;
 		clock-names = "mclk";
 		wlf,shared-lrclk;
+		wlf,hp-cfg = <3 2 3>;
+		wlf,gpio-cfg = <1 3>;
 	};
 
 	ov5640: ov5640@3c {
@@ -686,6 +684,7 @@
 };
 
 &pwm1 {
+	#pwm-cells = <2>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm1>;
 	status = "okay";
@@ -719,7 +718,7 @@
 			  <&clks IMX6UL_CLK_SAI2>;
 	assigned-clock-parents = <&clks IMX6UL_CLK_PLL4_AUDIO_DIV>;
 	assigned-clock-rates = <0>, <12288000>;
-
+	fsl,sai-mclk-direction-output;
 	status = "okay";
 };
 
@@ -738,10 +737,10 @@
 &tsc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_tsc>;
-	status = "okay";
-	xnur-gpio = <&gpio1 3 0>;
+	xnur-gpio = <&gpio1 3 GPIO_ACTIVE_LOW>;
 	measure_delay_time = <0xffff>;
 	pre_charge_time = <0xfff>;
+	status = "okay";
 };
 
 &uart1 {
@@ -799,5 +798,5 @@
 &wdog1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_wdog>;
-	fsl,wdog_b;
+	fsl,ext-reset-output;
 };
