@@ -312,7 +312,13 @@
 };
 
 &usdhc1 {
-	status = "disabled";
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc1>, <&pinctrl_usdhc1_gpio>;
+	pinctrl-1 = <&pinctrl_usdhc1_100mhz>, <&pinctrl_usdhc1_gpio>;
+	pinctrl-2 = <&pinctrl_usdhc1_200mhz>, <&pinctrl_usdhc1_gpio>;
+	no-1-8-v;
+	keep-power-in-suspend;
+	status = "okay";
 };
 
 &wdog1 {
