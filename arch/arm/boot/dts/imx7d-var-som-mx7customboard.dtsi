@@ -311,16 +311,6 @@
 	status = "okay";
 };
 
-&usdhc1 {
-	pinctrl-names = "default", "state_100mhz", "state_200mhz";
-	pinctrl-0 = <&pinctrl_usdhc1>, <&pinctrl_usdhc1_gpio>;
-	pinctrl-1 = <&pinctrl_usdhc1_100mhz>, <&pinctrl_usdhc1_gpio>;
-	pinctrl-2 = <&pinctrl_usdhc1_200mhz>, <&pinctrl_usdhc1_gpio>;
-	no-1-8-v;
-	keep-power-in-suspend;
-	status = "okay";
-};
-
 &wdog1 {
 	status = "disabled";
 };
@@ -502,13 +492,6 @@
 	pinctrl_touch: touchgrp {
 		fsl,pins = <
 			MX7D_PAD_EPDC_PWR_COM__GPIO2_IO30	0x80000000  /* capacitive touch irq */
-		>;
-	};
-
-	pinctrl_usdhc1_gpio: usdhc1_gpiogrp {
-		fsl,pins = <
-			MX7D_PAD_SD1_CD_B__GPIO5_IO0		0x59 /* CD */
-			MX7D_PAD_GPIO1_IO08__SD1_VSELECT	0x59 /* VSELECT */
 		>;
 	};
 
