@@ -10,10 +10,11 @@
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
-#include <sound/jack.h>
+#include <linux/pm_runtime.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 
+#include "../../codecs/da7219-aad.h"
 #include "../../codecs/da7219.h"
 #include "../../codecs/mt6358.h"
 #include "../common/mtk-afe-platform-driver.h"
@@ -45,10 +46,6 @@ static struct snd_soc_jack_pin mt8186_jack_pins[] = {
 	{
 		.pin = "Headset Mic",
 		.mask = SND_JACK_MICROPHONE,
-	},
-	{
-		.pin = "Line Out",
-		.mask = SND_JACK_LINEOUT,
 	},
 };
 
@@ -103,7 +100,7 @@ static int mt8186_da7219_init(struct snd_soc_pcm_runtime *rtd)
 	snd_jack_set_key(jack->jack, SND_JACK_BTN_2, KEY_VOLUMEDOWN);
 	snd_jack_set_key(jack->jack, SND_JACK_BTN_3, KEY_VOICECOMMAND);
 
-	snd_soc_component_set_jack(cmpnt_codec, &priv->headset_jack, NULL);
+	da7219_aad_jack_det(cmpnt_codec, &priv->headset_jack);
 
 	return 0;
 }
@@ -195,7 +192,7 @@ static int mt8186_mt6366_da7219_max98357_hdmi_init(struct snd_soc_pcm_runtime *r
 	struct mt8186_mt6366_da7219_max98357_priv *priv = soc_card_data->mach_priv;
 	int ret;
 
-	ret = mt8186_dai_i2s_set_share(afe, "I2S2", "I2S3");
+	ret = mt8186_dai_i2s_set_share(afe, "I2S3", "I2S2");
 	if (ret) {
 		dev_err(rtd->dev, "Failed to set up shared clocks\n");
 		return ret;
@@ -968,7 +965,6 @@ mt8186_mt6366_da7219_max98357_widgets[] = {
 	SND_SOC_DAPM_SPK("Speakers", NULL),
 	SND_SOC_DAPM_HP("Headphones", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
-	SND_SOC_DAPM_LINE("Line Out", NULL),
 	SND_SOC_DAPM_OUTPUT("HDMI1"),
 	SND_SOC_DAPM_MIXER(SOF_DMA_DL1, SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_MIXER(SOF_DMA_DL2, SND_SOC_NOPM, 0, 0, NULL, 0),
@@ -1001,7 +997,6 @@ mt8186_mt6366_da7219_max98357_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Speakers"),
 	SOC_DAPM_PIN_SWITCH("Headphones"),
 	SOC_DAPM_PIN_SWITCH("Headset Mic"),
-	SOC_DAPM_PIN_SWITCH("Line Out"),
 	SOC_DAPM_PIN_SWITCH("HDMI1"),
 };
 
@@ -1066,7 +1061,7 @@ static int mt8186_mt6366_da7219_max98357_dev_probe(struct platform_device *pdev)
 		card->name = card->topology_shortname;
 		sof_on = 1;
 	} else {
-		dev_dbg(&pdev->dev, "Probe without adsp\n");
+		dev_info(&pdev->dev, "Probe without adsp\n");
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node, "mediatek,dai-link")) {
@@ -1166,7 +1161,6 @@ static const struct of_device_id mt8186_mt6366_da7219_max98357_dt_match[] = {
 	},
 	{}
 };
-MODULE_DEVICE_TABLE(of, mt8186_mt6366_da7219_max98357_dt_match);
 #endif
 
 static struct platform_driver mt8186_mt6366_da7219_max98357_driver = {

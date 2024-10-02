@@ -7,10 +7,20 @@
 /dts-v1/;
 
 #include <dt-bindings/usb/pd.h>
+#include <dt-bindings/net/mxl-8611x.h>
 #include "imx93.dtsi"
 
 / {
 	compatible = "variscite,imx93-var-som", "fsl,imx93";
+
+	iw612_pwrseq: iw612_pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		post-power-on-delay-ms = <100>;
+		power-off-delay-us = <10000>;
+		reset-gpios = <&gpio4 14 GPIO_ACTIVE_LOW>,	/* WIFI_RESET */
+			      <&gpio3 7 GPIO_ACTIVE_LOW>;	/* WIFI_PWR_EN */
+		status = "okay";
+	};
 
 	reg_eqos_phy: regulator-eqos-phy {
 		compatible = "regulator-fixed";
@@ -71,14 +81,17 @@
 		ethphy0: ethernet-phy@0 {
 			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <0>;
-			at803x,eee-disabled;
 			eee-broken-1000t;
-			vddio-supply = <&vddio>;
-
-			vddio: vddio-regulator {
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
-			};
+			mxl-8611x,led0_cfg = <(
+				MXL8611X_LEDX_CFG_LINK_UP_RX_ACT_ON |
+				MXL8611X_LEDX_CFG_LINK_UP_TX_ACT_ON |
+				MXL8611X_LEDX_CFG_TRAFFIC_ACT_BLINK_IND
+			)>;
+			mxl-8611x,led1_cfg = <(
+				MXL8611X_LEDX_CFG_LINK_UP_10MB_ON |
+				MXL8611X_LEDX_CFG_LINK_UP_100MB_ON |
+				MXL8611X_LEDX_CFG_LINK_UP_1GB_ON
+			)>;
 		};
 	};
 };
@@ -202,12 +215,23 @@
 
 	pinctrl_usdhc3: usdhc3grp {
 		fsl,pins = <
-			MX93_PAD_SD3_CLK__USDHC3_CLK			0x1306
-			MX93_PAD_SD3_CMD__USDHC3_CMD			0x1306
-			MX93_PAD_SD3_DATA0__USDHC3_DATA0		0x1306
-			MX93_PAD_SD3_DATA1__USDHC3_DATA1		0x1306
-			MX93_PAD_SD3_DATA2__USDHC3_DATA2		0x1306
-			MX93_PAD_SD3_DATA3__USDHC3_DATA3		0x1306
+			MX93_PAD_SD3_CLK__USDHC3_CLK		0x1382
+			MX93_PAD_SD3_CMD__USDHC3_CMD		0x1382
+			MX93_PAD_SD3_DATA0__USDHC3_DATA0	0x1382
+			MX93_PAD_SD3_DATA1__USDHC3_DATA1	0x1382
+			MX93_PAD_SD3_DATA2__USDHC3_DATA2	0x1382
+			MX93_PAD_SD3_DATA3__USDHC3_DATA3	0x1382
+		>;
+	};
+
+	pinctrl_usdhc3_sleep: usdhc3grp-sleep {
+		fsl,pins = <
+			MX93_PAD_SD3_CLK__GPIO3_IO20		0x400
+			MX93_PAD_SD3_CMD__GPIO3_IO21		0x400
+			MX93_PAD_SD3_DATA0__GPIO3_IO22		0x400
+			MX93_PAD_SD3_DATA1__GPIO3_IO23		0x400
+			MX93_PAD_SD3_DATA2__GPIO3_IO24		0x400
+			MX93_PAD_SD3_DATA3__GPIO3_IO25		0x400
 		>;
 	};
 };
@@ -279,22 +303,6 @@
 				regulator-always-on;
 			};
 
-			ldo2: LDO2 {
-				regulator-name = "LDO2";
-				regulator-min-microvolt = <800000>;
-				regulator-max-microvolt = <1150000>;
-				regulator-boot-on;
-				regulator-always-on;
-			};
-
-			ldo3: LDO3 {
-				regulator-name = "LDO3";
-				regulator-min-microvolt = <800000>;
-				regulator-max-microvolt = <3300000>;
-				regulator-boot-on;
-				regulator-always-on;
-			};
-
 			ldo4: LDO4 {
 				regulator-name = "LDO4";
 				regulator-min-microvolt = <800000>;
@@ -347,6 +355,11 @@
 	};
 };
 
+&lpm {
+	soc-supply = <&buck1>;
+	status = "okay";
+};
+
 &lpspi8 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lpspi8>;
@@ -354,7 +367,7 @@
 	status = "okay";
 
 	/* Resistive touch controller */
-	ads7846@0 {
+	ads7846_ts: ads7846@0 {
 		reg = <0>;      /* CS0 */
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_restouch>;
@@ -415,17 +428,14 @@
 &usdhc3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-names = "default", "state_100mhz", "state_200mhz", "sleep";
 	pinctrl-0 = <&pinctrl_usdhc3>, <&pinctrl_wifi>;
 	pinctrl-1 = <&pinctrl_usdhc3>, <&pinctrl_wifi>;
 	pinctrl-2 = <&pinctrl_usdhc3>, <&pinctrl_wifi>;
+	pinctrl-3 = <&pinctrl_usdhc3_sleep>, <&pinctrl_wifi>;
 	bus-width = <4>;
+	mmc-pwrseq = <&iw612_pwrseq>;
 	non-removable;
 	wakeup-source;
 	status = "okay";
-
-	brcmf: bcrmf@1 {
-		reg = <1>;
-		compatible = "brcm,bcm4329-fmac";
-	};
 };

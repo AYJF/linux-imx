@@ -67,7 +67,7 @@ deploy_kernel_headers () {
 	) > debian/hdrsrcfiles
 
 	{
-		if is_enabled CONFIG_STACK_VALIDATION; then
+		if is_enabled CONFIG_OBJTOOL; then
 			echo tools/objtool/objtool
 		fi
 
@@ -125,6 +125,9 @@ um)
 	;;
 parisc|mips|powerpc)
 	installed_image_path="boot/vmlinux-$version"
+	;;
+arm64)
+	installed_image_path="boot/$(basename $KBUILD_IMAGE)-$version"
 	;;
 *)
 	installed_image_path="boot/vmlinuz-$version"

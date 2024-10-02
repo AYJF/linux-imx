@@ -786,16 +786,10 @@ static const struct regmap_bus pcf2131_i2c_regmap = {
 
 static struct i2c_driver pcf2131_i2c_driver;
 
-static const struct i2c_device_id pcf2131_i2c_id[] = {
-	{ "pcf2131", 1 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, pcf2131_i2c_id);
-
-static int pcf2131_i2c_probe(struct i2c_client *client)
+static int pcf2131_i2c_probe(struct i2c_client *client,
+				const struct i2c_device_id *id)
 {
 	struct regmap *regmap;
-	int type;
 	static const struct regmap_config config = {
 		.reg_bits = 8,
 		.val_bits = 8,
@@ -813,10 +807,15 @@ static int pcf2131_i2c_probe(struct i2c_client *client)
 		return PTR_ERR(regmap);
 	}
 
-	type = i2c_match_id(pcf2131_i2c_id, client)->driver_data;
 	return pcf2131_probe(&client->dev, regmap, client->irq,
-			     pcf2131_i2c_driver.driver.name, type);
+			     pcf2131_i2c_driver.driver.name, id->driver_data);
 }
+
+static const struct i2c_device_id pcf2131_i2c_id[] = {
+	{ "pcf2131", 1 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, pcf2131_i2c_id);
 
 static struct i2c_driver pcf2131_i2c_driver = {
 	.driver		= {

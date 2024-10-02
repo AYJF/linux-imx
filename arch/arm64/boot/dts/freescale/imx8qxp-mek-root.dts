@@ -17,7 +17,7 @@
 		 */
 		#address-cells = <1>;
 		#size-cells = <0>;
-		doma@0 {
+		doma {
 			/*
 			 * This is not for domu, this is just reuse
 			 * the method for jailhouse inmate non root cell

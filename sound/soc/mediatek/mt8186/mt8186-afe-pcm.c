@@ -2395,7 +2395,6 @@ static bool mt8186_is_volatile_reg(struct device *dev, unsigned int reg)
 	case AUDIO_TOP_CON1:	/* reg bit controlled by CCF */
 	case AUDIO_TOP_CON2:
 	case AUDIO_TOP_CON3:
-	case AFE_DAC_CON0:
 	case AFE_DL1_CUR_MSB:
 	case AFE_DL1_CUR:
 	case AFE_DL1_END:
@@ -2815,6 +2814,7 @@ static int mt8186_afe_pcm_dev_probe(struct platform_device *pdev)
 {
 	struct mtk_base_afe *afe;
 	struct mt8186_afe_private *afe_priv;
+	struct resource *res;
 	struct reset_control *rstc;
 	struct device *dev = &pdev->dev;
 	int i, ret, irq_id;
@@ -2835,7 +2835,8 @@ static int mt8186_afe_pcm_dev_probe(struct platform_device *pdev)
 	afe_priv = afe->platform_priv;
 	afe->dev = &pdev->dev;
 
-	afe->base_addr = devm_platform_ioremap_resource(pdev, 0);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	afe->base_addr = devm_ioremap_resource(dev, res);
 	if (IS_ERR(afe->base_addr))
 		return PTR_ERR(afe->base_addr);
 
@@ -2845,6 +2846,10 @@ static int mt8186_afe_pcm_dev_probe(struct platform_device *pdev)
 		dev_err(dev, "init clock error, ret %d\n", ret);
 		return ret;
 	}
+
+	ret = devm_add_action_or_reset(dev, mt8186_deinit_clock, (void *)afe);
+	if (ret)
+		return ret;
 
 	/* init memif */
 	afe->memif_32bit_supported = 0;

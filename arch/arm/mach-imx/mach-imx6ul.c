@@ -31,10 +31,7 @@ static void __init imx6ul_enet_clk_init(void)
 static inline void imx6ul_enet_init(void)
 {
 	imx6ul_enet_clk_init();
-	if (cpu_is_imx6ul())
-		imx6_enet_mac_init("fsl,imx6ul-fec", "fsl,imx6ul-ocotp");
-	else
-		imx6_enet_mac_init("fsl,imx6ul-fec", "fsl,imx6ull-ocotp");
+	imx6_enet_mac_init("fsl,imx6ul-fec", "fsl,imx6ul-ocotp");
 }
 
 static void __init imx6ul_init_machine(void)
@@ -73,7 +70,6 @@ static void __init imx6ul_map_io(void)
 static const char * const imx6ul_dt_compat[] __initconst = {
 	"fsl,imx6ul",
 	"fsl,imx6ull",
-	"fsl,imx6ulz",
 	NULL,
 };
 

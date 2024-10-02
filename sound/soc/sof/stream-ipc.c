@@ -33,23 +33,22 @@ int sof_ipc_msg_data(struct snd_sof_dev *sdev,
 	if (!sps || !sdev->stream_box.size) {
 		snd_sof_dsp_mailbox_read(sdev, sdev->dsp_box.offset, p, sz);
 	} else {
+		struct snd_pcm_substream *substream = sps->substream;
+		struct snd_compr_stream *cstream = sps->cstream;
 		size_t posn_offset;
 
-		if (sps->substream) {
-			struct sof_stream *stream = sps->substream->runtime->private_data;
+		if (substream) {
+			struct sof_stream *pstream = substream->runtime->private_data;
 
-			/* The stream might already be closed */
-			if (!stream)
+			if (!pstream)
 				return -ESTRPIPE;
 
-			posn_offset = stream->posn_offset;
+			posn_offset = pstream->posn_offset;
 		} else {
-
-			struct sof_compr_stream *sstream = sps->cstream->runtime->private_data;
+			struct sof_compr_stream *sstream = cstream->runtime->private_data;
 
 			if (!sstream)
 				return -ESTRPIPE;
-
 			posn_offset = sstream->posn_offset;
 		}
 
@@ -61,32 +60,20 @@ int sof_ipc_msg_data(struct snd_sof_dev *sdev,
 EXPORT_SYMBOL(sof_ipc_msg_data);
 
 int sof_set_stream_data_offset(struct snd_sof_dev *sdev,
-			       struct snd_sof_pcm_stream *sps,
+			       struct snd_pcm_substream *substream,
 			       size_t posn_offset)
 {
+	struct sof_stream *stream = substream->runtime->private_data;
+
 	/* check if offset is overflow or it is not aligned */
 	if (posn_offset > sdev->stream_box.size ||
 	    posn_offset % sizeof(struct sof_ipc_stream_posn) != 0)
 		return -EINVAL;
 
-	posn_offset += sdev->stream_box.offset;
+	stream->posn_offset = sdev->stream_box.offset + posn_offset;
 
-	if (sps->substream) {
-		struct sof_stream *stream = sps->substream->runtime->private_data;
-
-		stream->posn_offset = posn_offset;
-		dev_dbg(sdev->dev, "pcm: stream dir %d, posn mailbox offset is %zu",
-			sps->substream->stream, posn_offset);
-	} else if (sps->cstream) {
-		struct sof_compr_stream *sstream = sps->cstream->runtime->private_data;
-
-		sstream->posn_offset = posn_offset;
-		dev_dbg(sdev->dev, "compr: stream dir %d, posn mailbox offset is %zu",
-			sps->cstream->direction, posn_offset);
-	} else {
-		dev_err(sdev->dev, "No stream opened");
-		return -EINVAL;
-	}
+	dev_dbg(sdev->dev, "pcm: stream dir %d, posn mailbox offset is %zu",
+		substream->stream, stream->posn_offset);
 
 	return 0;
 }

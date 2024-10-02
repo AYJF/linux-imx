@@ -20,6 +20,7 @@ properties:
           - fsl,imx23-lcdif
           - fsl,imx28-lcdif
           - fsl,imx6sx-lcdif
+          - fsl,imx8mp-lcdif
       - items:
           - enum:
               - fsl,imx6sl-lcdif
@@ -60,10 +61,6 @@ properties:
 	maximum bandwidth in bytes per second that the
 	controller can handle; if not present, the memory
 	interface is fast enough to handle all possible video modes
-
-  video-mem-size:
-    - description: |
-	video memory size in bytes, 32 MB if omitted
 
 required:
   - compatible

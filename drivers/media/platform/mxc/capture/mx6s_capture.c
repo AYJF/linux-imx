@@ -1288,6 +1288,9 @@ static int mx6s_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 
 static int mx6s_vidioc_s_input(struct file *file, void *priv, unsigned int i)
 {
+	if (i > 0)
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -1473,23 +1476,11 @@ static int mx6s_vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 				    struct v4l2_format *f)
 {
 	struct mx6s_csi_dev *csi_dev = video_drvdata(file);
-	struct mx6s_fmt *fmt6s = NULL;
 
 	WARN_ON(priv != file->private_data);
 
 	f->fmt.pix = csi_dev->pix;
-	fmt6s = format_by_mbus(csi_dev->mbus_code);
 
-	if (fmt6s != NULL) {
-		f->fmt.pix.pixelformat = fmt6s->pixelformat;
-		csi_dev->pix.pixelformat = fmt6s->pixelformat;
-	}
-
-	f->fmt.pix.width = csi_dev->pix.width;
-	f->fmt.pix.height = csi_dev->pix.height;
-	f->fmt.pix.sizeimage = csi_dev->pix.sizeimage;
-	f->fmt.pix.field = csi_dev->pix.field;
-	f->type = csi_dev->type;
 	return 0;
 }
 
@@ -1801,7 +1792,7 @@ static int mx6sx_register_subdevs(struct mx6s_csi_dev *csi_dev)
 	struct v4l2_async_subdev *asd;
 	int ret;
 
-	v4l2_async_notifier_init(&csi_dev->subdev_notifier);
+	v4l2_async_nf_init(&csi_dev->subdev_notifier);
 
 	/* Attach sensors linked to csi receivers */
 	for_each_available_child_of_node(parent, node) {
@@ -1822,7 +1813,7 @@ static int mx6sx_register_subdevs(struct mx6s_csi_dev *csi_dev)
 		}
 
 		csi_dev->fwnode = of_fwnode_handle(rem);
-		asd = v4l2_async_notifier_add_fwnode_subdev(
+		asd = v4l2_async_nf_add_fwnode(
 					&csi_dev->subdev_notifier,
 					csi_dev->fwnode,
 					struct v4l2_async_subdev);
@@ -1832,7 +1823,7 @@ static int mx6sx_register_subdevs(struct mx6s_csi_dev *csi_dev)
 
 	csi_dev->subdev_notifier.ops = &mx6s_capture_async_ops;
 
-	ret = v4l2_async_notifier_register(&csi_dev->v4l2_dev,
+	ret = v4l2_async_nf_register(&csi_dev->v4l2_dev,
 					&csi_dev->subdev_notifier);
 	if (ret)
 		dev_err(csi_dev->dev,
@@ -1979,8 +1970,8 @@ static int mx6s_csi_remove(struct platform_device *pdev)
 	struct mx6s_csi_dev *csi_dev =
 				container_of(v4l2_dev, struct mx6s_csi_dev, v4l2_dev);
 
-	v4l2_async_notifier_cleanup(&csi_dev->subdev_notifier);
-	v4l2_async_notifier_unregister(&csi_dev->subdev_notifier);
+	v4l2_async_nf_cleanup(&csi_dev->subdev_notifier);
+	v4l2_async_nf_unregister(&csi_dev->subdev_notifier);
 
 	video_unregister_device(csi_dev->vdev);
 	v4l2_device_unregister(&csi_dev->v4l2_dev);

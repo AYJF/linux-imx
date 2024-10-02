@@ -297,12 +297,6 @@ static const char * const aic3x_rampup_step[] = { "0ms", "1ms", "2ms", "4ms" };
 static SOC_ENUM_SINGLE_DECL(aic3x_rampup_step_enum, HPOUT_POP_REDUCTION, 2,
 			    aic3x_rampup_step);
 
-static const char * const aic3x_dmic_rates[] = { "off", "128x", "64x", "32x" };
-static SOC_ENUM_SINGLE_DECL(aic3x_dmic_rates_enum, AIC3X_ASD_INTF_CTRLA, 0,
-			    aic3x_dmic_rates);
-static const struct snd_kcontrol_new aic3x_dmic_rates_controls =
-SOC_DAPM_ENUM("Route", aic3x_dmic_rates_enum);
-
 /*
  * DAC digital volumes. From -63.5 to 0 dB in 0.5 dB steps
  */
@@ -757,9 +751,6 @@ static const struct snd_soc_dapm_widget aic3x_extra_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("MIC3R"),
 	SND_SOC_DAPM_INPUT("LINE2L"),
 	SND_SOC_DAPM_INPUT("LINE2R"),
-
-	SND_SOC_DAPM_MUX("DMic Rate", SND_SOC_NOPM, 0, 0, &aic3x_dmic_rates_controls),
-	SND_SOC_DAPM_INPUT("DMIC"),
 };
 
 /* For tlv320aic3104 */
@@ -947,12 +938,6 @@ static const struct snd_soc_dapm_route intercon_extra[] = {
 	{"GPIO1 dmic modclk", NULL, "DMic Rate 128"},
 	{"GPIO1 dmic modclk", NULL, "DMic Rate 64"},
 	{"GPIO1 dmic modclk", NULL, "DMic Rate 32"},
-
-	{"GPIO1 dmic modclk", NULL, "DMic Rate"},
-	{"DMic Rate", "128x", "DMIC"},
-	{"DMic Rate", "64x", "DMIC"},
-	{"DMic Rate", "32x", "DMIC"},
-	{"DMic Rate", "off", "DMIC"},
 
 	/* Left Line Output */
 	{"Left Line Mixer", "Line2L Bypass Switch", "Left Line2L Mux"},
@@ -1268,22 +1253,21 @@ static int aic3x_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	iface_areg = snd_soc_component_read(component, AIC3X_ASD_INTF_CTRLA) & 0x3f;
 	iface_breg = snd_soc_component_read(component, AIC3X_ASD_INTF_CTRLB) & 0x3f;
 
-	/* set master/slave audio interface */
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBP_CFP:
 		aic3x->master = 1;
 		iface_areg |= BIT_CLK_MASTER | WORD_CLK_MASTER;
 		break;
-	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_CBC_CFC:
 		aic3x->master = 0;
 		iface_areg &= ~(BIT_CLK_MASTER | WORD_CLK_MASTER);
 		break;
-	case SND_SOC_DAIFMT_CBM_CFS:
+	case SND_SOC_DAIFMT_CBP_CFC:
 		aic3x->master = 1;
 		iface_areg |= BIT_CLK_MASTER;
 		iface_areg &= ~WORD_CLK_MASTER;
 		break;
-	case SND_SOC_DAIFMT_CBS_CFM:
+	case SND_SOC_DAIFMT_CBC_CFP:
 		aic3x->master = 1;
 		iface_areg |= WORD_CLK_MASTER;
 		iface_areg &= ~BIT_CLK_MASTER;
@@ -1713,7 +1697,6 @@ static const struct snd_soc_component_driver soc_component_dev_aic3x = {
 	.num_dapm_routes	= ARRAY_SIZE(intercon),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static void aic3x_configure_ocmv(struct device *dev, struct aic3x_priv *aic3x)
@@ -1885,7 +1868,7 @@ err:
 }
 EXPORT_SYMBOL(aic3x_probe);
 
-int aic3x_remove(struct device *dev)
+void aic3x_remove(struct device *dev)
 {
 	struct aic3x_priv *aic3x = dev_get_drvdata(dev);
 
@@ -1896,7 +1879,6 @@ int aic3x_remove(struct device *dev)
 		gpio_set_value(aic3x->gpio_reset, 0);
 		gpio_free(aic3x->gpio_reset);
 	}
-	return 0;
 }
 EXPORT_SYMBOL(aic3x_remove);
 

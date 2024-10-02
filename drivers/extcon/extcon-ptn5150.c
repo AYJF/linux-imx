@@ -73,6 +73,7 @@ static const struct regmap_config ptn5150_regmap_config = {
 static void ptn5150_check_state(struct ptn5150_info *info)
 {
 	unsigned int port_status, reg_data, vbus;
+	enum usb_role usb_role = USB_ROLE_NONE;
 	int ret;
 
 	ret = regmap_read(info->regmap, PTN5150_REG_CC_STATUS, &reg_data);
@@ -88,11 +89,7 @@ static void ptn5150_check_state(struct ptn5150_info *info)
 		extcon_set_state_sync(info->edev, EXTCON_USB_HOST, false);
 		gpiod_set_value_cansleep(info->vbus_gpiod, 0);
 		extcon_set_state_sync(info->edev, EXTCON_USB, true);
-		if (info->role_sw) {
-			ret = usb_role_switch_set_role(info->role_sw, USB_ROLE_DEVICE);
-			if (ret)
-				dev_err(info->dev, "PTN5150_DFP_ATTACHED failed to set role: %d\n", ret);
-		}
+		usb_role = USB_ROLE_DEVICE;
 		break;
 	case PTN5150_UFP_ATTACHED:
 		extcon_set_state_sync(info->edev, EXTCON_USB, false);
@@ -103,11 +100,7 @@ static void ptn5150_check_state(struct ptn5150_info *info)
 			gpiod_set_value_cansleep(info->vbus_gpiod, 1);
 
 		extcon_set_state_sync(info->edev, EXTCON_USB_HOST, true);
-		if (info->role_sw) {
-			ret = usb_role_switch_set_role(info->role_sw, USB_ROLE_HOST);
-			if (ret)
-				dev_err(info->dev, "PTN5150_UFP_ATTACHED failed to set role: %d\n", ret);
-		}
+		usb_role = USB_ROLE_HOST;
 		break;
 	default:
 		if (info->irq_is_id) {
@@ -121,6 +114,13 @@ static void ptn5150_check_state(struct ptn5150_info *info)
 			}
 		}
 		break;
+	}
+
+	if (usb_role) {
+		ret = usb_role_switch_set_role(info->role_sw, usb_role);
+		if (ret)
+			dev_err(info->dev, "failed to set %s role: %d\n",
+				usb_role_string(usb_role), ret);
 	}
 }
 
@@ -158,6 +158,13 @@ static void ptn5150_irq_work(struct work_struct *work)
 			extcon_set_state_sync(info->edev,
 					EXTCON_USB, false);
 			gpiod_set_value_cansleep(info->vbus_gpiod, 0);
+
+			ret = usb_role_switch_set_role(info->role_sw,
+						       USB_ROLE_NONE);
+			if (ret)
+				dev_err(info->dev,
+					"failed to set none role: %d\n",
+					ret);
 		}
 	}
 
@@ -224,6 +231,7 @@ static void ptn5150_work_sync_and_put(void *data)
 	struct ptn5150_info *info = data;
 
 	cancel_work_sync(&info->irq_work);
+	usb_role_switch_put(info->role_sw);
 }
 
 static int ptn5150_i2c_probe(struct i2c_client *i2c)
@@ -325,27 +333,22 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return -EINVAL;
 
+	info->role_sw = usb_role_switch_get(info->dev);
+	if (IS_ERR(info->role_sw))
+		return dev_err_probe(info->dev, PTR_ERR(info->role_sw),
+				     "failed to get role switch\n");
+
 	ret = devm_add_action_or_reset(dev, ptn5150_work_sync_and_put, info);
 	if (ret)
 		return ret;
-
-	info->role_sw = usb_role_switch_get(info->dev);
-	if (IS_ERR(info->role_sw)) {
-		if (PTR_ERR(info->role_sw) != -EPROBE_DEFER)
-			dev_err(info->dev, "PTN5150 failed to get role switch\n");
-
-		return PTR_ERR(info->role_sw);
-	}
 
 	/*
 	 * Update current extcon state if for example OTG connection was there
 	 * before the probe
 	 */
-	disable_irq(info->irq);
 	mutex_lock(&info->mutex);
 	ptn5150_check_state(info);
 	mutex_unlock(&info->mutex);
-	enable_irq(info->irq);
 
 	return 0;
 }

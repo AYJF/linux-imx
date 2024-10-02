@@ -211,8 +211,8 @@ static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memty
 
 	ret = device_register(&new_memtier->dev);
 	if (ret) {
-		list_del(&new_memtier->list);
-		put_device(&new_memtier->dev);
+		list_del(&memtier->list);
+		put_device(&memtier->dev);
 		return ERR_PTR(ret);
 	}
 	memtier = new_memtier;
@@ -366,7 +366,7 @@ static void establish_demotion_targets(void)
 
 	lockdep_assert_held_once(&memory_tier_lock);
 
-	if (!node_demotion)
+	if (!node_demotion || !IS_ENABLED(CONFIG_MIGRATION))
 		return;
 
 	disable_all_demotion_targets();
@@ -451,6 +451,7 @@ static void establish_demotion_targets(void)
 }
 
 #else
+static inline void disable_all_demotion_targets(void) {}
 static inline void establish_demotion_targets(void) {}
 #endif /* CONFIG_MIGRATION */
 
@@ -560,11 +561,11 @@ struct memory_dev_type *alloc_memory_type(int adistance)
 }
 EXPORT_SYMBOL_GPL(alloc_memory_type);
 
-void put_memory_type(struct memory_dev_type *memtype)
+void destroy_memory_type(struct memory_dev_type *memtype)
 {
 	kref_put(&memtype->kref, release_memtype);
 }
-EXPORT_SYMBOL_GPL(put_memory_type);
+EXPORT_SYMBOL_GPL(destroy_memory_type);
 
 void init_node_memory_type(int node, struct memory_dev_type *memtype)
 {
@@ -586,7 +587,7 @@ void clear_node_memory_type(int node, struct memory_dev_type *memtype)
 	 */
 	if (!node_memory_types[node].map_count) {
 		node_memory_types[node].memtype = NULL;
-		put_memory_type(memtype);
+		kref_put(&memtype->kref, release_memtype);
 	}
 	mutex_unlock(&memory_tier_lock);
 }
@@ -644,7 +645,7 @@ static int __init memory_tier_init(void)
 	 * than default DRAM tier.
 	 */
 	default_dram_type = alloc_memory_type(MEMTIER_ADISTANCE_DRAM);
-	if (IS_ERR(default_dram_type))
+	if (!default_dram_type)
 		panic("%s() failed to allocate default DRAM tier\n", __func__);
 
 	/*
@@ -663,7 +664,7 @@ static int __init memory_tier_init(void)
 	establish_demotion_targets();
 	mutex_unlock(&memory_tier_lock);
 
-	hotplug_memory_notifier(memtier_hotplug_callback, MEMTIER_HOTPLUG_PRI);
+	hotplug_memory_notifier(memtier_hotplug_callback, MEMTIER_HOTPLUG_PRIO);
 	return 0;
 }
 subsys_initcall(memory_tier_init);
@@ -672,16 +673,16 @@ bool numa_demotion_enabled = false;
 
 #ifdef CONFIG_MIGRATION
 #ifdef CONFIG_SYSFS
-static ssize_t demotion_enabled_show(struct kobject *kobj,
-				     struct kobj_attribute *attr, char *buf)
+static ssize_t numa_demotion_enabled_show(struct kobject *kobj,
+					  struct kobj_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%s\n",
 			  numa_demotion_enabled ? "true" : "false");
 }
 
-static ssize_t demotion_enabled_store(struct kobject *kobj,
-				      struct kobj_attribute *attr,
-				      const char *buf, size_t count)
+static ssize_t numa_demotion_enabled_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf, size_t count)
 {
 	ssize_t ret;
 
@@ -693,7 +694,8 @@ static ssize_t demotion_enabled_store(struct kobject *kobj,
 }
 
 static struct kobj_attribute numa_demotion_enabled_attr =
-	__ATTR_RW(demotion_enabled);
+	__ATTR(demotion_enabled, 0644, numa_demotion_enabled_show,
+	       numa_demotion_enabled_store);
 
 static struct attribute *numa_attrs[] = {
 	&numa_demotion_enabled_attr.attr,
