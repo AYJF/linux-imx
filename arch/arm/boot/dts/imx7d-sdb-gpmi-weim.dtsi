@@ -8,7 +8,6 @@
 
 &gpmi{
 	status = "okay";
-	fsl,use-minimum-ecc;
 };
 
 /* &sai1{ */
