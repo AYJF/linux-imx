@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2022 Vivante Corporation
+*    Copyright (c) 2014 - 2023 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2022 Vivante Corporation
+*    Copyright (C) 2014 - 2023 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -408,8 +408,10 @@ gc_load_show(void *m, void *data)
 
                 gcmkONERROR(gckHARDWARE_SetPowerState(Hardware, state));
 
-                if (hi_total_cycle_count[i] == 0)
-                    load[i] = 0;
+                if (hi_total_cycle_count[i] == 0) {
+                    len += fs_printf(ptr, "The current HW doesn't support use AHB register to read cycle counter.\n");
+                    goto OnError;
+                }
                 else
                     load[i] = (hi_total_cycle_count[i] - hi_total_idle_cycle_count[i]) * 100 / hi_total_cycle_count[i];
 
@@ -1167,7 +1169,7 @@ set_clk(const char *buf)
             break;
     }
 
-    if (4 == sscanf(data, "%u %d %d", &dumpCore, &clkScale[0], &clkScale[1])) {
+    if (4 == sscanf(data, "%u %u %d %d", &devIndex, &dumpCore, &clkScale[0], &clkScale[1])) {
         pr_warn("Change device:%d core:%d MC scale:%d SH scale:%d\n",
                 devIndex, dumpCore, clkScale[0], clkScale[1]);
     } else {
@@ -2390,7 +2392,7 @@ gckGALDEVICE_Construct(IN gcsPLATFORM                *Platform,
                         gcmkONERROR(gcvSTATUS_OUT_OF_RESOURCES);
                     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
                     device->registerBases[i] =
                         (gctPOINTER)ioremap(physical, device->requestedRegisterMemSizes[i]);
 #else
@@ -2413,7 +2415,7 @@ gckGALDEVICE_Construct(IN gcsPLATFORM                *Platform,
     }
 
     if (gal_device->devices[0]->irqLines[gcvCORE_MAJOR] != -1 ||
-        gcmBITTEST(isrPolling, gcvCORE_MAJOR)!= 0) {
+        gcmBITTEST(isrPolling, gcvCORE_MAJOR) != 0) {
         gcmkONERROR(gctaOS_ConstructOS(gal_device->os, &gal_device->taos));
     }
 
@@ -2580,7 +2582,7 @@ gckGALDEVICE_Construct(IN gcsPLATFORM                *Platform,
 
         for (i = gcvCORE_2D; i <= gcvCORE_2D_MAX; i++) {
 #if !gcdCAPTURE_ONLY_MODE
-            if (device->irqLines[i] != -1 || gcmBITTEST(isrPolling, i)!= 0) {
+            if (device->irqLines[i] != -1 || gcmBITTEST(isrPolling, i) != 0) {
                 gcmkONERROR(gckDEVICE_AddCore(device,
                                               (gceCORE)i,
                                               Args->chipIDs[i],
@@ -2605,7 +2607,7 @@ gckGALDEVICE_Construct(IN gcsPLATFORM                *Platform,
         }
 
 #if !gcdCAPTURE_ONLY_MODE
-        if (device->irqLines[gcvCORE_VG] != -1 || gcmBITTEST(isrPolling, gcvCORE_VG)!= 0) {
+        if (device->irqLines[gcvCORE_VG] != -1 || gcmBITTEST(isrPolling, gcvCORE_VG) != 0) {
 #if gcdENABLE_VG
              gcmkONERROR(gckDEVICE_AddCore(device,
                                            gcvCORE_VG,

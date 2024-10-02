@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2022 Vivante Corporation
+*    Copyright (c) 2014 - 2023 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2022 Vivante Corporation
+*    Copyright (C) 2014 - 2023 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -808,8 +808,10 @@ static struct drm_driver viv_drm_driver = {
     .gem_free_object            = viv_gem_free_object,
 #        endif
 #    endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
     .prime_handle_to_fd = drm_gem_prime_handle_to_fd,
     .prime_fd_to_handle = drm_gem_prime_fd_to_handle,
+#    endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
     .gem_prime_export   = viv_gem_prime_export,
 #    endif

@@ -51,7 +51,7 @@
 #include <linux/compat.h>
 #include <linux/busfreq-imx.h>
 
-#ifdef CONFIG_DEVICE_THERMAL
+#ifdef CONFIG_DEVFREQ_THERMAL
 #include <linux/thermal.h>
 DEFINE_SPINLOCK(thermal_lock);
 /*1:hot, 0: not hot*/
@@ -304,7 +304,7 @@ static int hantro_ctrlblk_reset(struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_DEVICE_THERMAL
+#ifdef CONFIG_DEVFREQ_THERMAL
 static int hantro_thermal_check(struct device *dev)
 {
 	unsigned long flags;
@@ -366,7 +366,7 @@ static struct thermal_cooling_device_ops hantro_cooling_ops = {
 	.get_cur_state = hantro_cooling_get_cur_state,
 	.set_cur_state = hantro_cooling_set_cur_state,
 };
-#endif  //CONFIG_DEVICE_THERMAL
+#endif  //CONFIG_DEVFREQ_THERMAL
 
 static void ReadCoreConfig(hantrodec_t *dev)
 {
@@ -562,6 +562,9 @@ long ReserveDecoder(hantrodec_t *dev, struct file *filp, unsigned long format)
 	if (wait_event_interruptible(hw_queue, GetDecCoreAny(&Core, dev, filp, format) != 0))
 		return -ERESTARTSYS;
 
+	if (Core < 0 || Core >= HXDEC_MAX_CORES)
+		return -1;
+
 	if (IS_G1(dev->hw_id[Core])) {
 		if (0 == hantrodec_choose_core(1))
 			PDEBUG("G1 is reserved\n");
@@ -574,7 +577,7 @@ long ReserveDecoder(hantrodec_t *dev, struct file *filp, unsigned long format)
 			return -1;
 	}
 
-#ifdef CONFIG_DEVICE_THERMAL
+#ifdef CONFIG_DEVFREQ_THERMAL
 	if (hantro_dynamic_clock)
 		hantro_thermal_check(hantro_dev);
 #endif
@@ -1349,67 +1352,60 @@ static int get_hantro_core_desc32(struct core_desc *kp, struct core_desc_32 __us
 	return 0;
 }
 
-static int put_hantro_core_desc32(struct core_desc *kp, struct core_desc_32 __user *up)
+static bool hantrodec_is_compat_ptr_ioctl(unsigned int cmd)
 {
-	u32 tmp = (u32)((unsigned long)kp->regs);
-
-	if (!access_ok(up, sizeof(struct core_desc_32)) ||
-				put_user(kp->id, &up->id) ||
-				put_user(kp->size, &up->size) ||
-				put_user(tmp, &up->regs)) {
-		return -EFAULT;
-	}
-	return 0;
-}
-static long hantrodec_ioctl32(struct file *filp, unsigned int cmd, unsigned long arg)
-{
-#define HANTRO_IOCTL32(err, filp, cmd, arg) { \
-		err = hantrodec_ioctl(filp, cmd, arg); \
-		if (err) \
-			return err; \
-	}
-
-	union {
-		struct core_desc kcore;
-		unsigned long kux;
-		unsigned int kui;
-	} karg;
-	void __user *up = compat_ptr(arg);
-	long err = 0;
+	bool ret = true;
 
 	switch (_IOC_NR(cmd)) {
-	case _IOC_NR(HANTRODEC_IOCGHWOFFSET):
-	case _IOC_NR(HANTRODEC_IOC_MC_OFFSETS):
-		err = get_user(karg.kux, (s32 __user *)up);
-		if (err)
-			return err;
-		HANTRO_IOCTL32(err, filp, cmd, (unsigned long)&karg);
-		err = put_user(((s32)karg.kux), (s32 __user *)up);
-		break;
-	case _IOC_NR(HANTRODEC_IOCGHWIOSIZE):
-	case _IOC_NR(HANTRODEC_IOC_MC_CORES):
-	case _IOC_NR(HANTRODEC_IOCG_CORE_WAIT):
-	case _IOC_NR(HANTRODEC_IOX_ASIC_ID):
-		err = get_user(karg.kui, (s32 __user *)up);
-		if (err)
-			return err;
-		HANTRO_IOCTL32(err, filp, cmd, (unsigned long)&karg);
-		err = put_user(((s32)karg.kui), (s32 __user *)up);
-		break;
 	case _IOC_NR(HANTRODEC_IOCS_DEC_PUSH_REG):
 	case _IOC_NR(HANTRODEC_IOCS_PP_PUSH_REG):
 	case _IOC_NR(HANTRODEC_IOCX_DEC_WAIT):
 	case _IOC_NR(HANTRODEC_IOCX_PP_WAIT):
 	case _IOC_NR(HANTRODEC_IOCS_DEC_PULL_REG):
 	case _IOC_NR(HANTRODEC_IOCS_PP_PULL_REG):
-		err = get_hantro_core_desc32(&karg.kcore, up);
-		if (err)
-			return err;
-		HANTRO_IOCTL32(err, filp, cmd, (unsigned long)&karg);
-		err = put_hantro_core_desc32(&karg.kcore, up);
+		ret = false;
 		break;
 	default:
-		err = hantrodec_ioctl(filp, cmd, (unsigned long)up);
+		break;
+	}
+
+	return ret;
+}
+
+static long hantrodec_ioctl32(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	void __user *up = compat_ptr(arg);
+	struct core_desc Core;
+	long err = 0;
+
+	if (hantrodec_is_compat_ptr_ioctl(cmd))
+		return compat_ptr_ioctl(filp, cmd, arg);
+
+	err = get_hantro_core_desc32(&Core, up);
+	if (err)
+		return err;
+
+	if (Core.id >= hantrodec_data.cores)
+		return -EFAULT;
+
+	switch (_IOC_NR(cmd)) {
+	case _IOC_NR(HANTRODEC_IOCS_DEC_PUSH_REG):
+		err = DecFlushRegs(&hantrodec_data, &Core);
+		break;
+	case _IOC_NR(HANTRODEC_IOCS_PP_PUSH_REG):
+		err = PPFlushRegs(&hantrodec_data, &Core);
+		break;
+	case _IOC_NR(HANTRODEC_IOCX_DEC_WAIT):
+		err = WaitDecReadyAndRefreshRegs(&hantrodec_data, &Core);
+		break;
+	case _IOC_NR(HANTRODEC_IOCX_PP_WAIT):
+		err = WaitPPReadyAndRefreshRegs(&hantrodec_data, &Core);
+		break;
+	case _IOC_NR(HANTRODEC_IOCS_DEC_PULL_REG):
+		err = DecRefreshRegs(&hantrodec_data, &Core);
+		break;
+	case _IOC_NR(HANTRODEC_IOCS_PP_PULL_REG):
+		err = PPRefreshRegs(&hantrodec_data, &Core);
 		break;
 	}
 
@@ -1477,7 +1473,7 @@ static int hantrodec_release(struct inode *inode, struct file *filp)
 static int hantro_mmap(struct file *fp, struct vm_area_struct *vm)
 {
 	if (vm->vm_pgoff == (multicorebase[0] >> PAGE_SHIFT) || vm->vm_pgoff == (multicorebase[1] >> PAGE_SHIFT)) {
-		vm->vm_flags |= VM_IO;
+		vm_flags_set(vm, VM_IO);
 		vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 		PDEBUG("hantro mmap: size=0x%lX, page off=0x%lX\n", (vm->vm_end - vm->vm_start), vm->vm_pgoff);
 		return remap_pfn_range(vm, vm->vm_start, vm->vm_pgoff, vm->vm_end - vm->vm_start,
@@ -1903,7 +1899,7 @@ static int hantro_dev_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	hantro_class = class_create(THIS_MODULE, "mxc_hantro");
+	hantro_class = class_create("mxc_hantro");
 	if (IS_ERR(hantro_class)) {
 		err = PTR_ERR(hantro_class);
 		goto error;
@@ -1914,7 +1910,7 @@ static int hantro_dev_probe(struct platform_device *pdev)
 		goto err_out_class;
 	}
 
-#ifdef CONFIG_DEVICE_THERMAL
+#ifdef CONFIG_DEVFREQ_THERMAL
 	hantrodec_data.cooling = thermal_of_cooling_device_register(pdev->dev.of_node,
 		(char *)dev_name(&pdev->dev), &hantrodec_data, &hantro_cooling_ops);
 	if (IS_ERR(hantrodec_data.cooling))
@@ -1942,7 +1938,7 @@ static int hantro_dev_remove(struct platform_device *pdev)
 	hantro_clk_enable(&pdev->dev);
 	pm_runtime_get_sync(&pdev->dev);
 	if (hantrodec_major > 0) {
-#ifdef CONFIG_DEVICE_THERMAL
+#ifdef CONFIG_DEVFREQ_THERMAL
 		thermal_cooling_device_unregister(hantrodec_data.cooling);
 #endif
 		device_destroy(hantro_class, MKDEV(hantrodec_major, 0));

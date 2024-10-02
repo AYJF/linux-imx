@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2022 Vivante Corporation
+*    Copyright (c) 2014 - 2023 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2022 Vivante Corporation
+*    Copyright (C) 2014 - 2023 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -460,7 +460,7 @@ gckOS_DumpParam(void)
     }
 
 #if USE_LINUX_PCIE
-    pr_warn("Bars configuration: \n");
+    pr_warn("Bars configuration:\n");
 
     for (i = 0; i < gcdGLOBAL_CORE_COUNT; i++) {
         if (bars[i] != -1) {
@@ -471,7 +471,7 @@ gckOS_DumpParam(void)
     }
 #endif
 
-    pr_warn("System reserve memory configuration: \n");
+    pr_warn("System reserve memory configuration:\n");
 
     for (i = 0; i < gcdSYSTEM_RESERVE_COUNT; i++) {
         if (contiguousSizes[i]) {
@@ -484,7 +484,7 @@ gckOS_DumpParam(void)
         }
     }
 
-    pr_warn("Registers configuration: \n");
+    pr_warn("Registers configuration:\n");
 
     for (i = 0; i < gcdGLOBAL_CORE_COUNT; i++) {
         if (registerSizes[i]) {
@@ -709,8 +709,8 @@ static long drv_ioctl(struct file *filp, unsigned int ioctlCode, unsigned long a
         }
 
         /* Now bring in the gcsHAL_INTERFACE structure. */
-        if (drvArgs.InputBufferSize != sizeof(gcsHAL_INTERFACE) ||
-            drvArgs.OutputBufferSize != sizeof(gcsHAL_INTERFACE)) {
+        if (drvArgs.InputBufferSize > sizeof(gcsHAL_INTERFACE) ||
+            drvArgs.OutputBufferSize > sizeof(gcsHAL_INTERFACE)) {
             gcmkTRACE_ZONE(gcvLEVEL_ERROR, gcvZONE_DRIVER,
                            "%s(%d): input or/and output structures are invalid.\n",
                            __func__, __LINE__);
@@ -720,7 +720,7 @@ static long drv_ioctl(struct file *filp, unsigned int ioctlCode, unsigned long a
 
         copyLen = copy_from_user(&iface,
                                  gcmUINT64_TO_PTR(drvArgs.InputBuffer),
-                                 sizeof(gcsHAL_INTERFACE));
+                                 drvArgs.InputBufferSize);
 
         if (copyLen != 0) {
             gcmkTRACE_ZONE(gcvLEVEL_ERROR, gcvZONE_DRIVER,
@@ -763,7 +763,7 @@ static long drv_ioctl(struct file *filp, unsigned int ioctlCode, unsigned long a
         /* Copy data back to the user. */
         copyLen = copy_to_user(gcmUINT64_TO_PTR(drvArgs.OutputBuffer),
                                &iface,
-                               sizeof(gcsHAL_INTERFACE));
+                               drvArgs.OutputBufferSize);
 
         if (copyLen != 0) {
             gcmkTRACE_ZONE(gcvLEVEL_ERROR, gcvZONE_DRIVER,
@@ -931,7 +931,11 @@ static int drv_init(void)
             major = result;
 
         /* Create the device class. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+        device_class = class_create(CLASS_NAME);
+#else
         device_class = class_create(THIS_MODULE, CLASS_NAME);
+#endif
 
         if (IS_ERR(device_class)) {
             gcmkTRACE_ZONE(gcvLEVEL_ERROR, gcvZONE_DRIVER,
@@ -987,6 +991,7 @@ static void drv_exit(void)
         gcmkASSERT(gpuClass != gcvNULL);
         device_destroy(gpuClass, MKDEV(major, 0));
         class_destroy(gpuClass);
+        gpuClass = gcvNULL;
 
         unregister_chrdev(major, DEVICE_NAME);
     }

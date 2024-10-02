@@ -39,8 +39,8 @@ static const char *wm8731_supply_names[WM8731_NUM_SUPPLIES] = {
  * wm8731 register cache
  */
 static const struct reg_default wm8731_reg_defaults[] = {
-	{ 0, 0x0097 },
-	{ 1, 0x0097 },
+	{ 0, 0x0017 },
+	{ 1, 0x0017 },
 	{ 2, 0x0079 },
 	{ 3, 0x0079 },
 	{ 4, 0x000a },
@@ -181,7 +181,7 @@ SND_SOC_DAPM_OUTPUT("ROUT"),
 SND_SOC_DAPM_OUTPUT("RHPOUT"),
 SND_SOC_DAPM_ADC("ADC", "HiFi Capture", WM8731_PWR, 2, 1),
 SND_SOC_DAPM_MUX("Input Mux", SND_SOC_NOPM, 0, 0, &wm8731_input_mux_controls),
-SND_SOC_DAPM_PGA("Line Input", WM8731_PWR, 0, 1, NULL, 0),
+SND_SOC_DAPM_PGA("Line Input", WM8731_PWR, 6, 1, NULL, 0),
 SND_SOC_DAPM_MICBIAS("Mic Bias", WM8731_PWR, 1, 1),
 SND_SOC_DAPM_INPUT("MICIN"),
 SND_SOC_DAPM_INPUT("RLINEIN"),
@@ -616,6 +616,9 @@ int wm8731_init(struct device *dev, struct wm8731_priv *wm8731)
 	/* Disable bypass path by default */
 	regmap_update_bits(wm8731->regmap, WM8731_APANA, 0x8, 0);
 
+	/* Disable by default the Line In power down mode */
+	regmap_update_bits(wm8731->regmap, WM8731_PWR, 0x1, 0);
+
 	regcache_mark_dirty(wm8731->regmap);
 
 	ret = devm_snd_soc_register_component(dev,
@@ -642,7 +645,7 @@ const struct regmap_config wm8731_regmap = {
 	.max_register = WM8731_RESET,
 	.volatile_reg = wm8731_volatile,
 
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.reg_defaults = wm8731_reg_defaults,
 	.num_reg_defaults = ARRAY_SIZE(wm8731_reg_defaults),
 };

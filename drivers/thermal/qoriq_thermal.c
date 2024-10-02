@@ -4,7 +4,6 @@
 // Copyright 2022 NXP
 
 #include <linux/clk.h>
-#include <linux/device_cooling.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -15,12 +14,12 @@
 #include <linux/thermal.h>
 #include <linux/units.h>
 
-#include "thermal_core.h"
 #include "thermal_hwmon.h"
 
 #define SITES_MAX		16
 #define TMR_DISABLE		0x0
 #define TMR_ME			0x80000000
+#define TMR_CMD			BIT(29)
 #define TMR_ALPF		0x0c000000
 #define TMR_ALPF_V2		0x03000000
 #define TMTMIR_DEFAULT	0x0000000f
@@ -76,7 +75,6 @@ struct qoriq_sensor {
 	struct thermal_zone_device	*tzd;
 	int				temp_passive;
 	int				temp_critical;
-	struct thermal_cooling_device	*cdev;
 };
 
 struct qoriq_tmu_data {
@@ -99,7 +97,7 @@ static struct qoriq_tmu_data *qoriq_sensor_to_data(struct qoriq_sensor *s)
 
 static int tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 {
-	struct qoriq_sensor *qsensor = tz->devdata;
+	struct qoriq_sensor *qsensor = thermal_zone_device_priv(tz);
 	struct qoriq_tmu_data *qdata = qoriq_sensor_to_data(qsensor);
 	u32 val;
 	/*
@@ -136,20 +134,20 @@ static int tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 
 	if (qdata->ver == TMU_VER1) {
 		*temp = (val & GENMASK(7, 0)) * MILLIDEGREE_PER_DEGREE;
-	} else if (qdata->ver == TMU_VER93) {
+	} else {
 		if (val & TRITSR_TP5)
-			*temp = milli_kelvin_to_millicelsius((val & GENMASK(8, 0)) * MILLIDEGREE_PER_DEGREE + 500);
+			*temp = milli_kelvin_to_millicelsius((val & GENMASK(8, 0)) *
+							     MILLIDEGREE_PER_DEGREE + 500);
 		else
 			*temp = kelvin_to_millicelsius(val & GENMASK(8, 0));
-	} else {
-		*temp = kelvin_to_millicelsius(val & GENMASK(8, 0));
 	}
 
 	return 0;
 }
 
-static int tmu_get_trend(struct thermal_zone_device *tz, int trip,
-				    enum thermal_trend *trend)
+static int tmu_get_trend(struct thermal_zone_device *tz,
+			 const struct thermal_trip *trip,
+			 enum thermal_trend *trend)
 
 {
 	struct qoriq_sensor *qsensor = tz->devdata;
@@ -158,7 +156,7 @@ static int tmu_get_trend(struct thermal_zone_device *tz, int trip,
 	if (!qsensor->tzd)
 		return 0;
 
-	trip_temp = (trip == TMU_TRIP_PASSIVE) ? qsensor->temp_passive :
+	trip_temp = (trip->type == THERMAL_TRIP_PASSIVE) ? qsensor->temp_passive :
 					     qsensor->temp_critical;
 
 	if (qsensor->tzd->temperature >=
@@ -193,8 +191,8 @@ static const struct thermal_zone_device_ops tmu_tz_ops = {
 static int qoriq_tmu_register_tmu_zone(struct device *dev,
 				       struct qoriq_tmu_data *qdata)
 {
-	int id, sites = 0;
-	const struct thermal_trip *trip;
+	int i, id, sites = 0;
+	struct thermal_trip trip;
 
 	for (id = 0; id < SITES_MAX; id++) {
 		struct thermal_zone_device *tzd;
@@ -211,7 +209,6 @@ static int qoriq_tmu_register_tmu_zone(struct device *dev,
 			if (ret == -ENODEV)
 				continue;
 
-			regmap_write(qdata->regmap, REGS_TMR, TMR_DISABLE);
 			return ret;
 		}
 
@@ -222,38 +219,24 @@ static int qoriq_tmu_register_tmu_zone(struct device *dev,
 
 		sensor->tzd = tzd;
 
-		if (devm_thermal_add_hwmon_sysfs(tzd))
-			dev_warn(dev,
-				 "Failed to add hwmon sysfs attributes\n");
+		devm_thermal_add_hwmon_sysfs(dev, tzd);
+
 		/* first thermal zone takes care of system-wide device cooling */
 		if (id == 0) {
-			sensor->cdev = devfreq_cooling_register();
-			if (IS_ERR(sensor->cdev)) {
-				ret = PTR_ERR(sensor->cdev);
-				pr_err("failed to register devfreq cooling device: %d\n",
-					ret);
-				return ret;
-			}
 
-			ret = thermal_zone_bind_cooling_device(sensor->tzd,
-				TMU_TRIP_PASSIVE,
-				sensor->cdev,
-				THERMAL_NO_LIMIT,
-				THERMAL_NO_LIMIT,
-				THERMAL_WEIGHT_DEFAULT);
-			if (ret) {
-				pr_err("binding zone %s with cdev %s failed:%d\n",
-					sensor->tzd->type,
-					sensor->cdev->type,
-					ret);
-				devfreq_cooling_unregister(sensor->cdev);
-				return ret;
-			}
+			for (i = 0; i < thermal_zone_get_num_trips(sensor->tzd); i++) {
+				ret = thermal_zone_get_trip(sensor->tzd, i, &trip);
+				if (ret)
+					continue;
 
-			trip = of_thermal_get_trip_points(sensor->tzd);
-			sensor->temp_passive = trip[0].temperature;
-			sensor->temp_critical = trip[1].temperature;
+				if (trip.type == THERMAL_TRIP_CRITICAL) {
+					sensor->temp_critical = trip.temperature;
+				} else if(trip.type == THERMAL_TRIP_PASSIVE) {
+					sensor->temp_passive = trip.temperature;
+				}
+			}
 		}
+
 	}
 
 	if (sites) {
@@ -303,33 +286,6 @@ static int qoriq_tmu_calibration(struct device *dev,
 		regmap_write(data->regmap, REGS_TTCFGR, val);
 		val = of_read_number(calibration + 1, 1);
 		regmap_write(data->regmap, REGS_TSCFGR, val);
-	}
-
-	return 0;
-}
-
-static int imx93_tmu_calibration(struct device *dev,
-				 struct qoriq_tmu_data *data)
-{
-	const u32 *calibration = NULL;
-	u32 cal_pt = 0;
-	u32 val = 0;
-	unsigned int len = 0;
-	unsigned int i = 0;
-
-	calibration = of_get_property(dev->of_node, "fsl,tmu-calibration", &len);
-	if (calibration == NULL || len / 8 > 16 || len % 8) {
-		dev_err(dev, "invalid tmu calibration\n");
-		return -ENODEV;
-	}
-
-	for (i = 0; i < len; i += 0x8, calibration += 2) {
-		cal_pt = i / 8;
-		regmap_write(data->regmap, REGS_TTCFGR, cal_pt);
-		val = of_read_number(calibration, 1);
-		regmap_write(data->regmap, REGS_TSCFGR, val);
-		val = of_read_number(calibration + 1, 1);
-		regmap_write(data->regmap, REGS_TTRnCR(cal_pt), val);
 	}
 
 	return 0;
@@ -451,10 +407,7 @@ static int qoriq_tmu_probe(struct platform_device *pdev)
 
 	qoriq_tmu_init_device(data);	/* TMU initialization */
 
-	if (data->ver == TMU_VER93)
-		ret = imx93_tmu_calibration(dev, data);
-	else
-		ret = qoriq_tmu_calibration(dev, data);	/* TMU calibration */
+	ret = qoriq_tmu_calibration(dev, data);	/* TMU calibration */
 	if (ret < 0)
 		return ret;
 
@@ -478,6 +431,12 @@ static int __maybe_unused qoriq_tmu_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
+	if (data->ver == TMU_VER93) {
+		ret = regmap_update_bits(data->regmap, REGS_TMR, TMR_CMD, TMR_CMD);
+		if (ret)
+			return ret;
+	}
+
 	clk_disable_unprepare(data->clk);
 
 	return 0;
@@ -491,6 +450,12 @@ static int __maybe_unused qoriq_tmu_resume(struct device *dev)
 	ret = clk_prepare_enable(data->clk);
 	if (ret)
 		return ret;
+
+	if (data->ver == TMU_VER93) {
+		ret = regmap_update_bits(data->regmap, REGS_TMR, TMR_CMD, 0);
+		if (ret)
+			return ret;
+	}
 
 	/* Enable monitoring */
 	return regmap_update_bits(data->regmap, REGS_TMR, TMR_ME, TMR_ME);

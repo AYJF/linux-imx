@@ -8,7 +8,6 @@
 #include <linux/etherdevice.h>
 #include <linux/of_net.h>
 #include <linux/interrupt.h>
-#include <linux/msi.h>
 #include <linux/kthread.h>
 #include <linux/iommu.h>
 #include <linux/fsl/mc.h>
@@ -2026,9 +2025,14 @@ static int dpaa2_eth_poll(struct napi_struct *napi, int budget)
 		if (rx_cleaned >= budget ||
 		    txconf_cleaned >= DPAA2_ETH_TXCONF_PER_NAPI) {
 			work_done = budget;
+			if (ch->xdp.res & XDP_REDIRECT)
+				xdp_do_flush();
 			goto out;
 		}
 	} while (store_cleaned);
+
+	if (ch->xdp.res & XDP_REDIRECT)
+		xdp_do_flush();
 
 	/* Update NET DIM with the values for this CDAN */
 	dpaa2_io_update_net_dim(ch->dpio, ch->stats.frames_per_cdan,
@@ -2065,9 +2069,7 @@ out:
 		txc_fq->dq_bytes = 0;
 	}
 
-	if (ch->xdp.res & XDP_REDIRECT)
-		xdp_do_flush_map();
-	else if (rx_cleaned && ch->xdp.res & XDP_TX)
+	if (rx_cleaned && ch->xdp.res & XDP_TX)
 		dpaa2_eth_xdp_tx_flush(priv, ch, &priv->fq[flowid]);
 
 	return work_done;
@@ -3089,10 +3091,12 @@ static struct fsl_mc_device *dpaa2_eth_setup_dpcon(struct dpaa2_eth_priv *priv)
 	err = fsl_mc_object_allocate(to_fsl_mc_device(dev),
 				     FSL_MC_POOL_DPCON, &dpcon);
 	if (err) {
-		if (err == -ENXIO)
+		if (err == -ENXIO) {
+			dev_dbg(dev, "Waiting for DPCON\n");
 			err = -EPROBE_DEFER;
-		else
+		} else {
 			dev_info(dev, "Not enough DPCONs, will go on as-is\n");
+		}
 		return ERR_PTR(err);
 	}
 
@@ -3202,7 +3206,9 @@ static int dpaa2_eth_setup_dpio(struct dpaa2_eth_priv *priv)
 		channel = dpaa2_eth_alloc_channel(priv);
 		if (IS_ERR_OR_NULL(channel)) {
 			err = PTR_ERR_OR_ZERO(channel);
-			if (err != -EPROBE_DEFER)
+			if (err == -EPROBE_DEFER)
+				dev_dbg(dev, "waiting for affine channel\n");
+			else
 				dev_info(dev,
 					 "No affine channel for cpu %d and above\n", i);
 			goto err_alloc_ch;
@@ -4624,6 +4630,12 @@ static int dpaa2_eth_netdev_init(struct net_device *net_dev)
 			    NETIF_F_LLTX | NETIF_F_HW_TC | NETIF_F_TSO;
 	net_dev->gso_max_segs = DPAA2_ETH_ENQUEUE_MAX_FDS;
 	net_dev->hw_features = net_dev->features;
+	net_dev->xdp_features = NETDEV_XDP_ACT_BASIC |
+				NETDEV_XDP_ACT_REDIRECT |
+				NETDEV_XDP_ACT_NDO_XMIT;
+	if (priv->dpni_attrs.wriop_version >= DPAA2_WRIOP_VERSION(3, 0, 0) &&
+	    priv->dpni_attrs.num_queues <= 8)
+		net_dev->xdp_features |= NETDEV_XDP_ACT_XSK_ZEROCOPY;
 
 	if (priv->dpni_attrs.vlan_filter_entries)
 		net_dev->hw_features |= NETIF_F_HW_VLAN_CTAG_FILTER;
@@ -4656,8 +4668,10 @@ static int dpaa2_eth_connect_mac(struct dpaa2_eth_priv *priv)
 	dpni_dev = to_fsl_mc_device(priv->net_dev->dev.parent);
 	dpmac_dev = fsl_mc_get_endpoint(dpni_dev, 0);
 
-	if (PTR_ERR(dpmac_dev) == -EPROBE_DEFER)
+	if (PTR_ERR(dpmac_dev) == -EPROBE_DEFER) {
+		netdev_dbg(priv->net_dev, "waiting for mac\n");
 		return PTR_ERR(dpmac_dev);
+	}
 
 	if (IS_ERR(dpmac_dev) || dpmac_dev->dev.type != &fsl_mc_bus_dpmac_type)
 		return 0;
@@ -4678,11 +4692,16 @@ static int dpaa2_eth_connect_mac(struct dpaa2_eth_priv *priv)
 
 	if (dpaa2_mac_is_type_phy(mac)) {
 		err = dpaa2_mac_connect(mac);
-		if (err && err != -EPROBE_DEFER)
-			netdev_err(priv->net_dev, "Error connecting to the MAC endpoint: %pe",
-				   ERR_PTR(err));
-		if (err)
+		if (err) {
+			if (err == -EPROBE_DEFER)
+				netdev_dbg(priv->net_dev,
+					   "could not connect to MAC\n");
+			else
+				netdev_err(priv->net_dev,
+					   "Error connecting to the MAC endpoint: %pe",
+					   ERR_PTR(err));
 			goto err_close_mac;
+		}
 	}
 
 	mutex_lock(&priv->mac_lock);
@@ -4846,6 +4865,7 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 
 	priv = netdev_priv(net_dev);
 	priv->net_dev = net_dev;
+	SET_NETDEV_DEVLINK_PORT(net_dev, &priv->devlink_port);
 
 	mutex_init(&priv->mac_lock);
 
@@ -4870,10 +4890,12 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 	err = fsl_mc_portal_allocate(dpni_dev, FSL_MC_IO_ATOMIC_CONTEXT_PORTAL,
 				     &priv->mc_io);
 	if (err) {
-		if (err == -ENXIO)
+		if (err == -ENXIO) {
+			dev_dbg(dev, "waiting for MC portal\n");
 			err = -EPROBE_DEFER;
-		else
+		} else {
 			dev_err(dev, "MC portal allocation failed\n");
+		}
 		goto err_portal_alloc;
 	}
 
@@ -5064,7 +5086,7 @@ err_wq_alloc:
 	return err;
 }
 
-static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+static void dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 {
 	struct device *dev;
 	struct net_device *net_dev;
@@ -5112,8 +5134,6 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 	dev_dbg(net_dev->dev.parent, "Removed interface %s\n", net_dev->name);
 
 	free_netdev(net_dev);
-
-	return 0;
 }
 
 static const struct fsl_mc_device_id dpaa2_eth_match_id_table[] = {
@@ -5128,7 +5148,6 @@ MODULE_DEVICE_TABLE(fslmc, dpaa2_eth_match_id_table);
 static struct fsl_mc_driver dpaa2_eth_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.owner = THIS_MODULE,
 	},
 	.probe = dpaa2_eth_probe,
 	.remove = dpaa2_eth_remove,

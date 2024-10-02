@@ -5,12 +5,14 @@
 
 #include "imx8ulp-evk.dts"
 
+/delete-node/ &dsp_reserved;
+/delete-node/ &dsp_reserved_heap;
+/delete-node/ &dsp_vdev0vring0;
+/delete-node/ &dsp_vdev0vring1;
+/delete-node/ &dsp_vdev0buffer;
+
 / {
 	reserved-memory {
-		/delete-node/ dsp_reserved;
-		/delete-node/ dsp_vdev0vring0;
-		/delete-node/ dsp_vdev0vring1;
-		/delete-node/ dsp_vdev0buffer;
 		dsp_reserved0: dsp@8e000000 {
 			reg = <0 0x8e000000 0 0x1000000>;
 			no-map;
@@ -76,8 +78,9 @@
 	pinctrl-0 = <&pinctrl_sai5>;
 	pinctrl-1 = <&pinctrl_sai5>;
 
-	assigned-clocks = <&cgc2 IMX8ULP_CLK_HIFI_SEL>, <&cgc1 IMX8ULP_CLK_SAI5_SEL>;
-	assigned-clock-parents = <&cgc2 IMX8ULP_CLK_PLL4>,  <&cgc1 IMX8ULP_CLK_SPLL3_PFD1_DIV1>;
+	assigned-clocks = <&cgc2 IMX8ULP_CLK_HIFI_SEL>, <&cgc1 IMX8ULP_CLK_SAI5_SEL>, <&cgc2 IMX8ULP_CLK_HIFI_DIVCORE>;
+	assigned-clock-parents = <&cgc2 IMX8ULP_CLK_PLL4_PFD0>,  <&cgc1 IMX8ULP_CLK_SPLL3_PFD1_DIV1>;
+	assigned-clock-rates = <0>, <0>, <475200000>;
 
 	clocks = <&cgc2 IMX8ULP_CLK_HIFI_DIVCORE>,
 			<&cgc2 IMX8ULP_CLK_LPAV_BUS_DIV>,

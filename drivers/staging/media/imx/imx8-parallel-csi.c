@@ -183,7 +183,7 @@ struct mxc_parallel_csi_dev {
 	struct clk *clk_pixel;
 	bool clk_enable;
 
-	struct v4l2_async_subdev	asd;
+	struct v4l2_async_connection	asd;
 	struct v4l2_async_notifier	subdev_notifier;
 	struct v4l2_async_subdev	*async_subdevs[2];
 	struct v4l2_mbus_framefmt	format;
@@ -426,7 +426,7 @@ static int get_interface_ctrl_reg1_param(struct mxc_parallel_csi_dev *pcsidev,
 		*vsync_pulse = pcsidev->format.width << 1;
 		break;
 	case PI_V2:
-		*pixel_width = 10;
+		*pixel_width = pcsidev->format.width << 3;
 		*vsync_pulse = pcsidev->format.width - 1;
 		break;
 	default:
