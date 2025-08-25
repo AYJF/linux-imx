@@ -19,7 +19,7 @@
 
 	memory@40000000 {
 		device_type = "memory";
-		reg = <0x00000000 0x40000000 0 0x60000000>;
+		reg = <0x00000000 0x40000000 0x00000001 0x00000000>;
 	};
 
 	resmem: reserved-memory {
@@ -121,6 +121,12 @@
                 hw_margin_ms = <3000>;
 		always-running = "true";
 		status="disabled";  /* Managed by QEI SW */
+	};
+
+	irig-decoder {
+		compatible = "irig-decoder,gpio";
+		gpios = <&gpio1 1 GPIO_ACTIVE_HIGH>, /* IRIG In/IRQ */
+			<&gpio1 0 GPIO_ACTIVE_HIGH>; /* IRIG Out */
 	};
 
 };
@@ -483,6 +489,15 @@
 	status = "okay";
 };
 
+&usb3_phy0 {
+	status = "okay";
+};
+
+&usb_dwc3_0 {
+	dr_mode = "host";
+	status = "okay";
+};
+
 &usb3_phy1 {
 	status = "okay";
 };
@@ -595,15 +610,15 @@
 
 	pinctrl_ecspi1: ecspi1grp {
 		fsl,pins = <
-			MX8MQ_IOMUXC_ECSPI1_MOSI_ECSPI1_MOSI		0x19
-			MX8MQ_IOMUXC_ECSPI1_MISO_ECSPI1_MISO		0x19
-			MX8MQ_IOMUXC_ECSPI1_SCLK_ECSPI1_SCLK		0x19
+			MX8MQ_IOMUXC_ECSPI1_MOSI_ECSPI1_MOSI		0x1F
+			MX8MQ_IOMUXC_ECSPI1_MISO_ECSPI1_MISO		0x1F
+			MX8MQ_IOMUXC_ECSPI1_SCLK_ECSPI1_SCLK		0x1F
 		>;
 	};
 
 	pinctrl_ecspi1_cs: ecspi1csgrp {
 		fsl,pins = <
-			MX8MQ_IOMUXC_ECSPI1_SS0_GPIO5_IO9		0x19
+			MX8MQ_IOMUXC_ECSPI1_SS0_GPIO5_IO9		0x1F
 		>;
 	};
 
@@ -758,6 +773,7 @@
 	pinctrl_wdog: wdog1grp {
 		fsl,pins = <
 			MX8MQ_IOMUXC_GPIO1_IO02_WDOG1_WDOG_B		0xc6
+			MX8MQ_IOMUXC_GPIO1_IO03_GPIO1_IO3		0x16
 		>;
 	};
 
@@ -770,6 +786,13 @@
 		>;
 	};
 
+
+	pinctrl_gpt1_input_capture: gpt1inputcapturegrp {
+		 fsl,pins = <
+			MX8MQ_IOMUXC_SAI3_RXFS_GPT1_CAPTURE1            0x00
+			MX8MQ_IOMUXC_SAI3_RXC_GPT1_CAPTURE2             0x00
+		 >;
+	};
 };
 
 /* HDMI Display Support */
