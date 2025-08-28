@@ -181,7 +181,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
-		compatible = "linux,spidev";
+		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <25000000>;
 		reg = <0>;
 	};
@@ -199,7 +199,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
-		compatible = "linux,spidev";
+		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <25000000>;
 		reg = <0>;
 	};
