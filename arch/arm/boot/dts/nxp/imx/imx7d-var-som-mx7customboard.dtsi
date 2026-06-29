@@ -302,7 +302,7 @@
 &usbotg1 {
 	vbus-supply = <&reg_usb_otg1_vbus>;
 	dr_mode = "host";
-	status = "disabled";
+	status = "okay";
 };
 
 &usbotg2 {
